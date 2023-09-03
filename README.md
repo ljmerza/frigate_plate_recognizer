@@ -16,6 +16,7 @@ frigate:
   main_topic: frigate
   camera:
     - driveway_camera
+  min_score: .8
 plate_recognizer:
   api_key: xxxxxxxxxx
   regions: 

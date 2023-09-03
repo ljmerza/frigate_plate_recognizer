@@ -18,7 +18,7 @@ config = None
 firstmessage = True
 _LOGGER = None
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -118,8 +118,10 @@ def on_message(client, userdata, message):
     plate_number = response['results'][0]['plate']
     score = response['results'][0]['score']
 
-    pprint(response.json())
-    return
+    min_score = config['frigate'].get('min_score')
+    if min_score and score < min_score:
+        _LOGGER.error(f"Score is below minimum: {score}")
+        return
 
     start_time = datetime.fromtimestamp(after_data['start_time'])
     formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
