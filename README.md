@@ -28,7 +28,6 @@ Update your frigate url, mqtt server settings. If you are using mqtt authenticat
 
 You'll need to make an account (free) [here](https://app.platerecognizer.com/accounts) and get an API key. You get up to 2,500 lookups per month for free. You will also need to enable car object detection for the cameras you want to use this with.
 
-
 ### Running
 
 ```bash
