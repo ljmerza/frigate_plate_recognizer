@@ -3,18 +3,9 @@ from datetime import datetime
 from io import BytesIO
 
 import sqlite3
-import numpy as np
 import time
 import multiprocessing
-import cv2
 import logging
-from collections import defaultdict
-import re
-
-from tflite_support.task import core
-from tflite_support.task import processor
-from tflite_support.task import vision
-from tflite_support import metadata_schema_py_generated as _metadata_fb
 
 import paho.mqtt.client as mqtt
 import hashlib
@@ -22,7 +13,6 @@ import yaml
 import sys
 import json
 import requests
-from PIL import Image, ImageOps
 
 config = None
 firstmessage = True
