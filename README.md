@@ -1,4 +1,4 @@
-# Frigate plate Recognizer
+# Frigate Plate Recognizer
 
 Identify license plates via [Plate Recognizer](https://guides.platerecognizer.com/) and adds them as sublabels to [blakeblackshear/frigate](https://github.com/blakeblackshear/frigate)
 
