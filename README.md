@@ -18,7 +18,7 @@ frigate:
     - driveway_camera
   min_score: .8
 plate_recognizer:
-  api_key: xxxxxxxxxx
+  token: xxxxxxxxxx
   regions: 
     - us-ca
 logger_level: INFO
