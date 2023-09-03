@@ -125,9 +125,6 @@ def on_message(client, userdata, message):
 
     start_time = datetime.fromtimestamp(after_data['start_time'])
     formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
-    result_text = formatted_start_time + "\n"
-    result_text = result_text + str(category)
-    _LOGGER.debug(f"result_text: {result_text}")
 
     # get db connection
     conn = sqlite3.connect(DB_PATH)
