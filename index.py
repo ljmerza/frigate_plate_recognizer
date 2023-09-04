@@ -127,10 +127,9 @@ def on_message(client, userdata, message):
         _LOGGER.error(f"Error getting snapshot: {response.status_code}")
         return
 
+    # try to get plate number
     plate_number = None
     score = None
-    
-    # try to get plate number
     if config.get('plate_recognizer'):
         plate_number, score = plate_recognizer(response.content)
     else:
