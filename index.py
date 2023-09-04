@@ -27,7 +27,6 @@ LOG_FILE = './config/frigate_plate_recogizer.log'
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 valid_objects = ['car', 'motorcycle', 'bus']
 
-
 def on_connect(client, userdata, flags, rc):
     _LOGGER.info("MQTT Connected")
     client.subscribe(config['frigate']['main_topic'] + "/events")
@@ -68,6 +67,30 @@ def set_sublabel(frigate_url, frigate_event, sublabel):
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
 
+def plate_recognizer(image):
+    pr_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
+    token = config['plate_recognizer']['token']
+
+    response = requests.post(
+        pr_url,
+        data=dict(regions=config['plate_recognizer']['regions']),
+        files=dict(upload=image),
+        headers={'Authorization': f'Token {token}'}
+    )
+
+    response = response.json()
+    _LOGGER.debug(f"response: {response}")
+
+    if response.get('results') is None:
+        _LOGGER.error(f"Failed to get plate number. Response: {response}")
+        return
+    
+    plate_number = response['results'][0]['plate']
+    score = response['results'][0]['score']
+
+    return plate_number, score
+
+
 def on_message(client, userdata, message):
     global firstmessage
     if firstmessage:
@@ -103,26 +126,16 @@ def on_message(client, userdata, message):
     if response.status_code != 200:
         _LOGGER.error(f"Error getting snapshot: {response.status_code}")
         return
+
+    plate_number = None
+    score = None
     
     # try to get plate number
-    pr_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
-    token = config['plate_recognizer']['token']
-    response = requests.post(
-        pr_url,
-        data=dict(regions=config['plate_recognizer']['regions']),
-        files=dict(upload=response.content),
-        headers={'Authorization': f'Token {token}'}
-    )
-
-    response = response.json()
-    _LOGGER.debug(f"response: {response}")
-
-    if response.get('results') is None:
-        _LOGGER.error(f"Failed to get plate number. Response: {response}")
+    if config.get('plate_recognizer'):
+        plate_number, score = plate_recognizer(response.content)
+    else:
+        _LOGGER.error("Plate Recognizer is not configured")
         return
-    
-    plate_number = response['results'][0]['plate']
-    score = response['results'][0]['score']
 
     min_score = config['frigate'].get('min_score')
     if min_score and score < min_score:
@@ -166,10 +179,12 @@ def setup_db():
     conn.commit()
     conn.close()
 
+
 def load_config():
     global config
     with open(CONFIG_PATH, 'r') as config_file:
         config = yaml.safe_load(config_file)
+
 
 def run_mqtt_client():
     _LOGGER.info(f"Starting MQTT client. Connecting to: {config['frigate']['mqtt_server']}")
@@ -190,6 +205,7 @@ def run_mqtt_client():
 
     client.connect(config['frigate']['mqtt_server'])
     client.loop_forever()
+
 
 def load_logger():
     global _LOGGER
