@@ -18,33 +18,13 @@ config = None
 firstmessage = True
 _LOGGER = None
 
-VERSION = '1.1.1'
+VERSION = '1.1.0'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
-
-
-def on_connect(client, userdata, flags, rc):
-    _LOGGER.info("MQTT Connected")
-    client.subscribe(config['frigate']['main_topic'] + "/events")
-
-
-def on_disconnect(client, userdata, rc):
-    if rc != 0:
-        _LOGGER.warning("Unexpected disconnection, trying to reconnect")
-        while True:
-            try:
-                client.reconnect()
-                break
-            except Exception as e:
-                _LOGGER.warning(f"Reconnection failed due to {e}, retrying in 60 seconds")
-                time.sleep(60)
-    else:
-        _LOGGER.error("Expected disconnection")
-
 
 def set_sublabel(frigate_url, frigate_event, sublabel):
     post_url = f"{frigate_url}/api/events/{frigate_event}/sub_label"
@@ -68,47 +48,14 @@ def set_sublabel(frigate_url, frigate_event, sublabel):
 
 
 def on_message(client, userdata, message):
-    global firstmessage
-    if firstmessage:
-        firstmessage = False
-        _LOGGER.debug("skipping first message")
-        return
-
-    # get frigate event payload
-    payload_dict = json.loads(message.payload)
-    _LOGGER.debug(f'mqtt message: {payload_dict}')
-    after_data = payload_dict.get('after', {})
-
-    if not after_data['camera'] in config['frigate']['camera']:
-        _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']}")
-        return
-
-    # check if it is a car
-    if(after_data['label'] != 'car'):
-        _LOGGER.error(f"is not a car label: {after_data['label']}")
-        return
-
-    # get frigate event
-    frigate_event = after_data['id']
-    frigate_url = config['frigate']['frigate_url']
-
-    snapshot_url = f"{frigate_url}/api/events/{frigate_event}/snapshot.jpg"
-    _LOGGER.debug(f"Getting image for event: {frigate_event}" )
-    _LOGGER.debug(f"event URL: {snapshot_url}")
-
-    response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
-
-    # Check if the request was successful (HTTP status code 200)
-    if response.status_code != 200:
-        _LOGGER.error(f"Error getting snapshot: {response.status_code}")
-        return
+    image = ''
     
     # try to get plate number
     token = config['plate_recognizer']['token']
     response = requests.post(
         PLATE_RECOGIZER_BASE_URL,
-        data=dict(regions=config['plate_recognizer']['regions']),
-        files=dict(upload=response.content),
+        regions=dict(regions=config['plate_recognizer']['regions']),
+        files=dict(upload=image),
         headers={'Authorization': f'Token {token}'}
     )
 
@@ -134,7 +81,7 @@ def on_message(client, userdata, message):
     _LOGGER.info(f"Storing plate number in database: {plate_number}")
     cursor.execute("""
         INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)
-    """, (formatted_start_time, score, plate_number, frigate_event, after_data['camera']))
+    """, (formatted_start_time, score, plate_number, frigate_event, 'test_camera'))
 
     # set the sublabel
     set_sublabel(frigate_url, frigate_event, plate_number)
@@ -164,26 +111,6 @@ def load_config():
     global config
     with open(CONFIG_PATH, 'r') as config_file:
         config = yaml.safe_load(config_file)
-
-def run_mqtt_client():
-    _LOGGER.info(f"Starting MQTT client. Connecting to: {config['frigate']['mqtt_server']}")
-    now = datetime.now()
-    current_time = now.strftime("%Y%m%d%H%M%S")
-
-    # setup mqtt client
-    client = mqtt.Client("FrigatePlateRecognizer" + current_time)
-    client.on_message = on_message
-    client.on_disconnect = on_disconnect
-    client.on_connect = on_connect
-
-    # check if we are using authentication and set username/password if so
-    if config['frigate']['mqtt_auth']:
-        username = config['frigate']['mqtt_username']
-        password = config['frigate']['mqtt_password']
-        client.username_pw_set(username, password)
-
-    client.connect(config['frigate']['mqtt_server'])
-    client.loop_forever()
 
 def load_logger():
     global _LOGGER
