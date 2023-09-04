@@ -18,13 +18,14 @@ config = None
 firstmessage = True
 _LOGGER = None
 
-VERSION = '1.1.1'
+VERSION = '1.2.0'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
+valid_objects = ['car', 'motorcycle', 'bus']
 
 
 def on_connect(client, userdata, flags, rc):
@@ -83,8 +84,8 @@ def on_message(client, userdata, message):
         _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']}")
         return
 
-    # check if it is a car
-    if(after_data['label'] != 'car'):
+    # check if it is a valid object like a car, motorcycle, or bus
+    if(after_data['label'] not in valid_objects):
         _LOGGER.error(f"is not a car label: {after_data['label']}")
         return
 
@@ -104,9 +105,10 @@ def on_message(client, userdata, message):
         return
     
     # try to get plate number
+    pr_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
     response = requests.post(
-        PLATE_RECOGIZER_BASE_URL,
+        pr_url,
         data=dict(regions=config['plate_recognizer']['regions']),
         files=dict(upload=response.content),
         headers={'Authorization': f'Token {token}'}
@@ -114,6 +116,10 @@ def on_message(client, userdata, message):
 
     response = response.json()
     _LOGGER.debug(f"response: {response}")
+
+    if response.get('results') is None:
+        _LOGGER.error(f"Failed to get plate number. Response: {response}")
+        return
     
     plate_number = response['results'][0]['plate']
     score = response['results'][0]['score']

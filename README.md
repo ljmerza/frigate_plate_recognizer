@@ -28,6 +28,18 @@ Update your frigate url, mqtt server settings. If you are using mqtt authenticat
 
 You'll need to make an account (free) [here](https://app.platerecognizer.com/accounts) and get an API key. You get up to 2,500 lookups per month for free. You will also need to enable car object detection for the cameras you want to use this with.
 
+You can specify a custom url for the plate_recognizer api by adding `api_url` to your config:
+
+```yml
+plate_recognizer:
+  api_url: http://HOST-IP:8080/v1/plate-reader
+  token: xxxxxxxxxx
+  regions: 
+    - us-ca
+```
+
+See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
+
 ### Running
 
 ```bash
