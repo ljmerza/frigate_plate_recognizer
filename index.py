@@ -112,7 +112,7 @@ def on_message(client, userdata, message):
 
     # check if it is a valid object like a car, motorcycle, or bus
     if(after_data['label'] not in valid_objects):
-        _LOGGER.error(f"is not a car label: {after_data['label']}")
+        _LOGGER.debug(f"is not a correct label: {after_data['label']}")
         return
 
     # get frigate event
