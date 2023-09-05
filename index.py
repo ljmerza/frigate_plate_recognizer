@@ -18,7 +18,7 @@ config = None
 firstmessage = True
 _LOGGER = None
 
-VERSION = '1.2.0'
+VERSION = '1.2.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -83,10 +83,13 @@ def plate_recognizer(image):
 
     if response.get('results') is None:
         _LOGGER.error(f"Failed to get plate number. Response: {response}")
-        return
+        return None, None
     
-    plate_number = response['results'][0]['plate']
-    score = response['results'][0]['score']
+    if len(response['results']) == 0:
+        return None, None
+
+    plate_number = response['results'][0].get('plate')
+    score = response['results'][0].get('score')
 
     return plate_number, score
 
@@ -136,9 +139,13 @@ def on_message(client, userdata, message):
         _LOGGER.error("Plate Recognizer is not configured")
         return
 
+    if plate_number is None:
+        _LOGGER.info(f'No plate number found for event {frigate_event}')
+        return
+
     min_score = config['frigate'].get('min_score')
     if min_score and score < min_score:
-        _LOGGER.error(f"Score is below minimum: {score}")
+        _LOGGER.info(f"Score is below minimum: {score}")
         return
 
     start_time = datetime.fromtimestamp(after_data['start_time'])
