@@ -1,6 +1,6 @@
-import signal
+#!/bin/python3
+
 from datetime import datetime
-from io import BytesIO
 
 import sqlite3
 import time
@@ -8,7 +8,6 @@ import multiprocessing
 import logging
 
 import paho.mqtt.client as mqtt
-import hashlib
 import yaml
 import sys
 import json
