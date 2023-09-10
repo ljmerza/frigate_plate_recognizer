@@ -182,7 +182,11 @@ def on_message(client, userdata, message):
     # send mqtt message
     if config['frigate'].get('return_topic'):
         _LOGGER.debug(f"Sending MQTT message: {plate_number}")
-        topic = f'{config['frigate']['frigate']}/{config['frigate']['return_topic']}'
+        
+        main_topic = config['frigate']['main_topic']
+        return_topic = config['frigate']['return_topic']
+        topic = f'{main_topic}/{return_topic}'
+
         mqtt_client.publish(topic, {
             'plate_number': plate_number,
             'score': score,
