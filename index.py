@@ -14,11 +14,12 @@ import sys
 import json
 import requests
 
+mqtt_client = None
 config = None
-firstmessage = True
+first_message = True
 _LOGGER = None
 
-VERSION = '1.2.2'
+VERSION = '1.3.0'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -27,17 +28,18 @@ LOG_FILE = './config/frigate_plate_recogizer.log'
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 valid_objects = ['car', 'motorcycle', 'bus']
 
-def on_connect(client, userdata, flags, rc):
+
+def on_connect(mqtt_client, userdata, flags, rc):
     _LOGGER.info("MQTT Connected")
-    client.subscribe(config['frigate']['main_topic'] + "/events")
+    mqtt_client.subscribe(config['frigate']['main_topic'] + "/events")
 
 
-def on_disconnect(client, userdata, rc):
+def on_disconnect(mqtt_client, userdata, rc):
     if rc != 0:
         _LOGGER.warning("Unexpected disconnection, trying to reconnect")
         while True:
             try:
-                client.reconnect()
+                mqtt_client.reconnect()
                 break
             except Exception as e:
                 _LOGGER.warning(f"Reconnection failed due to {e}, retrying in 60 seconds")
@@ -95,9 +97,9 @@ def plate_recognizer(image):
 
 
 def on_message(client, userdata, message):
-    global firstmessage
-    if firstmessage:
-        firstmessage = False
+    global first_message
+    if first_message:
+        first_message = False
         _LOGGER.debug("skipping first message")
         return
 
@@ -177,6 +179,18 @@ def on_message(client, userdata, message):
     # set the sublabel
     set_sublabel(frigate_url, frigate_event, plate_number)
 
+    # send mqtt message
+    if config['frigate'].get('return_topic'):
+        _LOGGER.debug(f"Sending MQTT message: {plate_number}")
+        topic = f'{config['frigate']['frigate']}/{config['frigate']['return_topic']}'
+        mqtt_client.publish(topic, {
+            'plate_number': plate_number,
+            'score': score,
+            'frigate_event': frigate_event,
+            'camera_name': after_data['camera'],
+            'start_time': formatted_start_time
+        })
+
     # Commit the changes
     conn.commit()
     conn.close()
@@ -206,24 +220,25 @@ def load_config():
 
 
 def run_mqtt_client():
+    global mqtt_client
     _LOGGER.info(f"Starting MQTT client. Connecting to: {config['frigate']['mqtt_server']}")
     now = datetime.now()
     current_time = now.strftime("%Y%m%d%H%M%S")
 
     # setup mqtt client
-    client = mqtt.Client("FrigatePlateRecognizer" + current_time)
-    client.on_message = on_message
-    client.on_disconnect = on_disconnect
-    client.on_connect = on_connect
+    mqtt_client = mqtt.Client("FrigatePlateRecognizer" + current_time)
+    mqtt_client.on_message = on_message
+    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client.on_connect = on_connect
 
     # check if we are using authentication and set username/password if so
     if config['frigate']['mqtt_auth']:
         username = config['frigate']['mqtt_username']
         password = config['frigate']['mqtt_password']
-        client.username_pw_set(username, password)
+        mqtt_client.username_pw_set(username, password)
 
-    client.connect(config['frigate']['mqtt_server'])
-    client.loop_forever()
+    mqtt_client.connect(config['frigate']['mqtt_server'])
+    mqtt_client.loop_forever()
 
 
 def load_logger():

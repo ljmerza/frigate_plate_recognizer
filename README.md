@@ -14,6 +14,7 @@ frigate:
   mqtt_username: username
   mqtt_password: password
   main_topic: frigate
+  return_topic: plate_recognizer
   camera:
     - driveway_camera
   min_score: .8
