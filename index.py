@@ -18,7 +18,7 @@ config = None
 firstmessage = True
 _LOGGER = None
 
-VERSION = '1.2.1'
+VERSION = '1.2.2'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -118,6 +118,19 @@ def on_message(client, userdata, message):
     # get frigate event
     frigate_event = after_data['id']
     frigate_url = config['frigate']['frigate_url']
+
+    # see if we have already processed this event
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM plates WHERE frigate_event = ?
+    """, (frigate_event,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if row is not None:
+        _LOGGER.debug(f"Skipping event: {frigate_event} because it has already been processed")
+        return
 
     snapshot_url = f"{frigate_url}/api/events/{frigate_event}/snapshot.jpg"
     _LOGGER.debug(f"Getting image for event: {frigate_event}" )
