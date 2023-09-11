@@ -173,6 +173,8 @@ def on_message(client, userdata, message):
     cursor.execute("""
         INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)
     """, (formatted_start_time, score, plate_number, frigate_event, after_data['camera']))
+    conn.commit()
+    conn.close()
 
     # set the sublabel
     set_sublabel(frigate_url, frigate_event, plate_number)
@@ -192,10 +194,6 @@ def on_message(client, userdata, message):
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time
         }))
-
-    # Commit the changes
-    conn.commit()
-    conn.close()
 
 
 def setup_db():
