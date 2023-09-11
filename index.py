@@ -4,7 +4,6 @@ from datetime import datetime
 
 import sqlite3
 import time
-import multiprocessing
 import logging
 
 import paho.mqtt.client as mqtt
