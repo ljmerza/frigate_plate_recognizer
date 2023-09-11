@@ -18,7 +18,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.3.1'
+VERSION = '1.3.2'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -192,7 +192,7 @@ def on_message(client, userdata, message):
             'frigate_event': frigate_event,
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time
-        })
+        }))
 
     # Commit the changes
     conn.commit()
@@ -278,10 +278,7 @@ def main():
     _LOGGER.info(f"Frigate Plate Recognizer Version: {VERSION}")
     _LOGGER.debug(f"config: {config}")
 
-    # start mqtt client
-    mqtt_process = multiprocessing.Process(target=run_mqtt_client)
-    mqtt_process.start()
-    mqtt_process.join()
+    run_mqtt_client()
 
 
 if __name__ == '__main__':
