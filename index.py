@@ -18,7 +18,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.3.0'
+VERSION = '1.3.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -186,7 +186,7 @@ def on_message(client, userdata, message):
         return_topic = config['frigate']['return_topic']
         topic = f'{main_topic}/{return_topic}'
 
-        mqtt_client.publish(topic, {
+        mqtt_client.publish(topic, json.dumps({
             'plate_number': plate_number,
             'score': score,
             'frigate_event': frigate_event,
