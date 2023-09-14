@@ -17,7 +17,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.3.2'
+VERSION = '1.3.3'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -93,6 +93,14 @@ def plate_recognizer(image):
 
     return plate_number, score
 
+def send_mqtt_message(message):
+    _LOGGER.debug(f"Sending MQTT message: {message}")
+
+    main_topic = config['frigate']['main_topic']
+    return_topic = config['frigate']['return_topic']
+    topic = f'{main_topic}/{return_topic}'
+
+    mqtt_client.publish(topic, json.dumps(message))
 
 def on_message(client, userdata, message):
     global first_message
@@ -181,19 +189,13 @@ def on_message(client, userdata, message):
 
     # send mqtt message
     if config['frigate'].get('return_topic'):
-        _LOGGER.debug(f"Sending MQTT message: {plate_number}")
-        
-        main_topic = config['frigate']['main_topic']
-        return_topic = config['frigate']['return_topic']
-        topic = f'{main_topic}/{return_topic}'
-
-        mqtt_client.publish(topic, json.dumps({
+        send_mqtt_message({
             'plate_number': plate_number,
             'score': score,
             'frigate_event': frigate_event,
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time
-        }))
+        })
 
 
 def setup_db():
