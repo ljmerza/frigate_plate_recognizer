@@ -113,6 +113,7 @@ def on_message(client, userdata, message):
     payload_dict = json.loads(message.payload)
     _LOGGER.debug(f'mqtt message: {payload_dict}')
     after_data = payload_dict.get('after', {})
+    before_data = payload_dict.get('before', {})
 
     if not after_data['camera'] in config['frigate']['camera']:
         _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']}")
@@ -121,6 +122,11 @@ def on_message(client, userdata, message):
     # check if it is a valid object like a car, motorcycle, or bus
     if(after_data['label'] not in valid_objects):
         _LOGGER.debug(f"is not a correct label: {after_data['label']}")
+        return
+
+    # check if Frigate has updated the snapshot
+    if(before_data['top_score'] == after_data['top_score']):
+        _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return
 
     # get frigate event
