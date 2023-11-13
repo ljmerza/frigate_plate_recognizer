@@ -17,7 +17,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.3.4'
+VERSION = '1.4.0'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -102,6 +102,9 @@ def send_mqtt_message(message):
 
     mqtt_client.publish(topic, json.dumps(message))
 
+def has_common_value(array1, array2):
+    return any(value in array2 for value in array1)
+
 def on_message(client, userdata, message):
     global first_message
     if first_message:
@@ -112,11 +115,19 @@ def on_message(client, userdata, message):
     # get frigate event payload
     payload_dict = json.loads(message.payload)
     _LOGGER.debug(f'mqtt message: {payload_dict}')
-    after_data = payload_dict.get('after', {})
-    before_data = payload_dict.get('before', {})
 
-    if not after_data['camera'] in config['frigate']['camera']:
-        _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']}")
+    before_data = payload_dict.get('before', {})
+    after_data = payload_dict.get('after', {})
+
+    # check if it is from the correct camera or zone
+    config_zones = config['frigate'].get('zones', [])
+    config_cameras = config['frigate'].get('camera', [])
+
+    matching_zone = any(value in after_data['zones'] for value in config_zones)
+    matching_camera =  after_data['camera'] in config_cameras
+
+    if not matching_zone and not matching_camera:
+        _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']} and/or zone: {after_data['zones']}")
         return
 
     # check if it is a valid object like a car, motorcycle, or bus

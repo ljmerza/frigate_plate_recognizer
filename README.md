@@ -39,6 +39,16 @@ plate_recognizer:
     - us-ca
 ```
 
+You can also filter by zones and/or cameras. If you want to filter by zones, add `zones` to your config:
+
+```yml
+frigate:
+  # ...
+  zones:
+    - front_door
+    - back_door
+```
+
 See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
 
 ### Running
