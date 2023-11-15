@@ -123,7 +123,7 @@ def on_message(client, userdata, message):
     config_zones = config['frigate'].get('zones', [])
     config_cameras = config['frigate'].get('camera', [])
 
-    matching_zone = any(value in after_data['zones'] for value in config_zones)
+    matching_zone = any(value in after_data['current_zones'] for value in config_zones)
     matching_camera =  after_data['camera'] in config_cameras
 
     if not matching_zone and not matching_camera:
