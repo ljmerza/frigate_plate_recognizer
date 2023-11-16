@@ -17,7 +17,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.6.0'
+VERSION = '1.6.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -140,10 +140,18 @@ def on_message(client, userdata, message):
     # if user has frigate plus then check license plate attribute else
     # limit api calls by only checking the best score for an event
     if(config['frigate'].get('frigate_plus', False)):
-        attributes = after_data.get('attributes', [])
-        if not any(attribute['label'] == 'license_plate' for attribute in attributes):
+        attributes = after_data.get('current_attributes', [])
+        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
+        if not any(license_plate_attribute):
             _LOGGER.debug(f"no license_plate attribute found in event attributes")
             return 
+        
+        # check min score of license plate attribute
+        license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
+        if license_plate_attribute[0]['score'] < license_plate_min_score:
+            _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
+            return
+        
     elif(before_data['top_score'] == after_data['top_score']):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return

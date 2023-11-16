@@ -54,7 +54,14 @@ frigate:
 
 If no objects are speficied in the Frigate options, it will default to `[motorcycle, car, bus]`.
 
-If you have a custom model with Frigate+ then it's able to detect license plates via an event's attributes, you can set `frigate_plus` to `true` in your config to activate this feature.
+If you have a custom model with Frigate+ then it's able to detect license plates via an event's attributes, you can set `frigate_plus` to `true` in your config to activate this feature:
+
+```yaml
+frigate:
+  # ... 
+  frigate_plus: true
+  license_plate_min_score: 0 # default is show all but can speficify a min score from 0 - 1 for example 0.8
+```
 
 ### Running
 
