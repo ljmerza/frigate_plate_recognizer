@@ -17,6 +17,8 @@ frigate:
   return_topic: plate_recognizer
   camera:
     - driveway_camera
+  objects:
+    - car
   min_score: .8
 plate_recognizer:
   token: xxxxxxxxxx
@@ -50,6 +52,8 @@ frigate:
 ```
 
 See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
+
+If nn objects are speficied in the Frigate options, it will default to `[motorcycle, car, bus]`.
 
 ### Running
 

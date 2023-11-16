@@ -17,14 +17,14 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.4.1'
+VERSION = '1.5.0'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
-valid_objects = ['car', 'motorcycle', 'bus']
+DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
 
 
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -130,7 +130,8 @@ def on_message(client, userdata, message):
         _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']} and/or zone: {after_data['zones']}")
         return
 
-    # check if it is a valid object like a car, motorcycle, or bus
+    # check if it is a valid object
+    valid_objects = config['frigate'].get('objects', DEFAULT_OBJECTS)
     if(after_data['label'] not in valid_objects):
         _LOGGER.debug(f"is not a correct label: {after_data['label']}")
         return
