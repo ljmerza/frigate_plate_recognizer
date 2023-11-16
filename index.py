@@ -17,7 +17,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.5.0'
+VERSION = '1.5.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -123,11 +123,12 @@ def on_message(client, userdata, message):
     config_zones = config['frigate'].get('zones', [])
     config_cameras = config['frigate'].get('camera', [])
 
-    matching_zone = any(value in after_data['current_zones'] for value in config_zones)
-    matching_camera =  after_data['camera'] in config_cameras
+    matching_zone = any(value in after_data['current_zones'] for value in config_zones) if config_zones else True
+    matching_camera = after_data['camera'] in config_cameras if config_cameras else True
 
-    if not matching_zone and not matching_camera:
-        _LOGGER.debug(f"Skipping event: {after_data['id']} because it is from the wrong camera: {after_data['camera']} and/or zone: {after_data['zones']}")
+    # Check if either both match (when both are defined) or at least one matches (when only one is defined)
+    if not (matching_zone and matching_camera):
+        _LOGGER.debug(f"Skipping event: {after_data['id']} because it does not match the configured zones/cameras")
         return
 
     # check if it is a valid object
@@ -136,8 +137,11 @@ def on_message(client, userdata, message):
         _LOGGER.debug(f"is not a correct label: {after_data['label']}")
         return
 
-    # check if Frigate has updated the snapshot
-    if(before_data['top_score'] == after_data['top_score']):
+    # if user has frigate plus then check license plate attribute else
+    # limit api calls by only checking the best score for an event
+    if(config['frigate'].get('frigate_plus', False)):
+        pass
+    elif(before_data['top_score'] == after_data['top_score']):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return
 
