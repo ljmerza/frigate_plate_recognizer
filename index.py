@@ -140,7 +140,10 @@ def on_message(client, userdata, message):
     # if user has frigate plus then check license plate attribute else
     # limit api calls by only checking the best score for an event
     if(config['frigate'].get('frigate_plus', False)):
-        pass
+        attributes = after_data.get('attributes', [])
+        if not any(attribute['label'] == 'license_plate' for attribute in attributes):
+            _LOGGER.debug(f"no license_plate attribute found in event attributes")
+            return 
     elif(before_data['top_score'] == after_data['top_score']):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return

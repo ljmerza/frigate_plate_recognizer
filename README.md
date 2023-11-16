@@ -15,6 +15,7 @@ frigate:
   mqtt_password: password
   main_topic: frigate
   return_topic: plate_recognizer
+  frigate_plus: false
   camera:
     - driveway_camera
   objects:
@@ -29,7 +30,7 @@ logger_level: INFO
 
 Update your frigate url, mqtt server settings. If you are using mqtt authentication, update the username and password. Update the camera name(s) to match the camera name in your frigate config. Add your Plate Recognizer API key and region(s).
 
-You'll need to make an account (free) [here](https://app.platerecognizer.com/accounts) and get an API key. You get up to 2,500 lookups per month for free. You will also need to enable car object detection for the cameras you want to use this with.
+You'll need to make an account (free) [here](https://app.platerecognizer.com/accounts) and get an API key. You get up to 2,500 lookups per month for free. You will also need to enable car object detection for the cameras you want to use this with. See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
 
 You can specify a custom url for the plate_recognizer api by adding `api_url` to your config:
 
@@ -51,9 +52,9 @@ frigate:
     - back_door
 ```
 
-See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
+If no objects are speficied in the Frigate options, it will default to `[motorcycle, car, bus]`.
 
-If nn objects are speficied in the Frigate options, it will default to `[motorcycle, car, bus]`.
+If you have a custom model with Frigate+ then it's able to detect license plates via an event's attributes, you can set `frigate_plus` to `true` in your config to activate this feature.
 
 ### Running
 
