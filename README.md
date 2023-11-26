@@ -1,6 +1,6 @@
 # Frigate Plate Recognizer
 
-Identify license plates via [Plate Recognizer](https://guides.platerecognizer.com/) and add them as sublabels to [blakeblackshear/frigate](https://github.com/blakeblackshear/frigate)
+Identify license plates via [Plate Recognizer](https://guides.platerecognizer.com/) or [CodeProject.AI](https://www.codeproject.com/) and add them as sublabels to [blakeblackshear/frigate](https://github.com/blakeblackshear/frigate)
 
 ### Setup
 
@@ -34,7 +34,7 @@ You'll need to make an account (free) [here](https://app.platerecognizer.com/acc
 
 You can specify a custom url for the plate_recognizer api by adding `api_url` to your config:
 
-If you're using CodeProject.AI, you'll need to comment out plate_recognizer and add the below config then  update "api_url" with your CodeProject.AI Service API URL.
+If you're using CodeProject.AI, you'll need to comment out plate_recognizer and add the below config, then update "api_url" with your CodeProject.AI Service API URL.
 
 ```yml
 code_project:
