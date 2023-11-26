@@ -34,13 +34,6 @@ You'll need to make an account (free) [here](https://app.platerecognizer.com/acc
 
 You can specify a custom url for the plate_recognizer api by adding `api_url` to your config:
 
-If you're using CodeProject.AI, you'll need to comment out plate_recognizer and add the below config, then update "api_url" with your CodeProject.AI Service API URL.
-
-```yml
-code_project:
-  api_url: http://127.0.0.1:32168/v1/image/alpr
-```
-
 ```yml
 plate_recognizer:
   api_url: http://HOST-IP:8080/v1/plate-reader
@@ -68,6 +61,12 @@ frigate:
   # ... 
   frigate_plus: true
   license_plate_min_score: 0 # default is show all but can speficify a min score from 0 - 1 for example 0.8
+```
+If you're using CodeProject.AI, you'll need to comment out plate_recognizer and then update "api_url" with your CodeProject.AI Service API URL:
+
+```yml
+code_project:
+  api_url: http://127.0.0.1:32168/v1/image/alpr
 ```
 
 ### Running
