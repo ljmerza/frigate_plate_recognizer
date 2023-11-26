@@ -60,14 +60,41 @@ def set_sublabel(frigate_url, frigate_event, sublabel):
     headers = { "Content-Type": "application/json" }
     response = requests.post(post_url, data=json.dumps(payload), headers=headers)
 
+
+    percentscore = "{:.1%}".format(score)
+
     # Check for a successful response
     if response.status_code == 200:
-        _LOGGER.info(f"Sublabel set successfully to: {sublabel}")
+        _LOGGER.info(f"Sublabel set successfully to: {sublabel} with {percentscore} confidence")
     else:
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
+def code_project(image):
+    global score
+    pr_url = config['code_project'].get('api_url')
+
+    response = requests.post(
+        pr_url,
+        files=dict(upload=image),
+    )
+    response = response.json()
+    _LOGGER.debug(f"response: {response}")
+
+    if response.get('predictions') is None:
+        _LOGGER.error(f"Failed to get plate number. Response: {response}")
+        return None, None
+
+    if len(response['predictions']) == 0:
+        _LOGGER.debug(f"No plates found")
+        return None, None
+
+    plate_number = response['predictions'][0].get('plate')
+    score = response['predictions'][0].get('confidence')
+
+    return plate_number, score
 
 def plate_recognizer(image):
+    global score
     pr_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
 
@@ -84,7 +111,7 @@ def plate_recognizer(image):
     if response.get('results') is None:
         _LOGGER.error(f"Failed to get plate number. Response: {response}")
         return None, None
-    
+
     if len(response['results']) == 0:
         return None, None
 
@@ -144,14 +171,14 @@ def on_message(client, userdata, message):
         license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
         if not any(license_plate_attribute):
             _LOGGER.debug(f"no license_plate attribute found in event attributes")
-            return 
-        
+            return
+
         # check min score of license plate attribute
         license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
         if license_plate_attribute[0]['score'] < license_plate_min_score:
             _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
             return
-        
+
     elif(before_data['top_score'] == after_data['top_score']):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return
@@ -187,8 +214,11 @@ def on_message(client, userdata, message):
     # try to get plate number
     plate_number = None
     score = None
+
     if config.get('plate_recognizer'):
         plate_number, score = plate_recognizer(response.content)
+    elif config.get('code_project'):
+        plate_number, score = code_project(response.content)
     else:
         _LOGGER.error("Plate Recognizer is not configured")
         return
@@ -297,7 +327,7 @@ def load_logger():
     # Add the handlers to the logger
     _LOGGER.addHandler(console_handler)
     _LOGGER.addHandler(file_handler)
-    
+
 
 def main():
     load_config()
@@ -309,6 +339,12 @@ def main():
     _LOGGER.info(f"Python Version: {sys.version}")
     _LOGGER.info(f"Frigate Plate Recognizer Version: {VERSION}")
     _LOGGER.debug(f"config: {config}")
+
+    if config.get('plate_recognizer'):
+        _LOGGER.info(f"Using Plate Recognizer API")
+    else:
+        _LOGGER.info(f"Using CodeProject.AI API")
+
 
     run_mqtt_client()
 
