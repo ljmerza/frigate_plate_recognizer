@@ -70,11 +70,10 @@ def set_sublabel(frigate_url, frigate_event, sublabel):
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
 def code_project(image):
-    global score
-    pr_url = config['code_project'].get('api_url')
+    api_url = config['code_project'].get('api_url')
 
     response = requests.post(
-        pr_url,
+        api_url,
         files=dict(upload=image),
     )
     response = response.json()
@@ -94,12 +93,11 @@ def code_project(image):
     return plate_number, score
 
 def plate_recognizer(image):
-    global score
-    pr_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
+    api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
 
     response = requests.post(
-        pr_url,
+        api_url,
         data=dict(regions=config['plate_recognizer']['regions']),
         files=dict(upload=image),
         headers={'Authorization': f'Token {token}'}
@@ -113,6 +111,7 @@ def plate_recognizer(image):
         return None, None
 
     if len(response['results']) == 0:
+        _LOGGER.debug(f"No plates found")
         return None, None
 
     plate_number = response['results'][0].get('plate')
