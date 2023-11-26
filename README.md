@@ -37,7 +37,7 @@ You can specify a custom url for the plate_recognizer api by adding `api_url` to
 If you're using CodeProject.AI, you'll need to comment out plate_recognizer and add the below config then  update "api_url" with your CodeProject.AI Service API URL.
 
 ```yml
-code_projectai:
+code_project:
   api_url: http://127.0.0.1:32168/v1/image/alpr
 ```
 
