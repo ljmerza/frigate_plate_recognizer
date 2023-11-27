@@ -63,7 +63,7 @@ frigate:
   license_plate_min_score: 0 # default is show all but can speficify a min score from 0 - 1 for example 0.8
 ```
 
-If you're using CodeProject.AI, you'll need to comment out plate_recognizer in your config. Then add and update update "api_url" with your CodeProject.AI Service API URL. Your config should look like:
+If you're using CodeProject.AI, you'll need to comment out plate_recognizer in your config. Then add and update "api_url" with your CodeProject.AI Service API URL. Your config should look like:
 
 ```yml
 #plate_recognizer:
