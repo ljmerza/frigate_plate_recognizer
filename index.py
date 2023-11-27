@@ -207,7 +207,7 @@ def on_message(client, userdata, message):
     _LOGGER.debug(f"Getting image for event: {frigate_event}" )
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
-    response = requests.get(snapshot_url, params={ "crop": 0, "quality": 100 })
+    response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
