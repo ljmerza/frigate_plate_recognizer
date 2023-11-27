@@ -17,7 +17,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.7.0'
+VERSION = '1.7.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -46,7 +46,7 @@ def on_disconnect(mqtt_client, userdata, rc):
         _LOGGER.error("Expected disconnection")
 
 
-def set_sublabel(frigate_url, frigate_event, sublabel):
+def set_sublabel(frigate_url, frigate_event, sublabel, score):
     post_url = f"{frigate_url}/api/events/{frigate_event}/sub_label"
     _LOGGER.debug(f'sublabel: {sublabel}')
     _LOGGER.debug(f'sublabel url: {post_url}')
@@ -226,20 +226,24 @@ def on_message(client, userdata, message):
         _LOGGER.info(f'No plate number found for event {frigate_event}')
         return
 
+    # check score
     min_score = config['frigate'].get('min_score')
     if min_score and score < min_score:
         _LOGGER.info(f"Score is below minimum: {score}")
         return
 
-    start_time = datetime.fromtimestamp(after_data['start_time'])
-    formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    
 
     # get db connection
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
     # Insert a new record of plate number
-    _LOGGER.info(f"Storing plate number in database: {plate_number}")
+    _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {score}")
+
+    start_time = datetime.fromtimestamp(after_data['start_time'])
+    formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    
     cursor.execute("""
         INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)
     """, (formatted_start_time, score, plate_number, frigate_event, after_data['camera']))
@@ -247,7 +251,7 @@ def on_message(client, userdata, message):
     conn.close()
 
     # set the sublabel
-    set_sublabel(frigate_url, frigate_event, plate_number)
+    set_sublabel(frigate_url, frigate_event, plate_number, score)
 
     # send mqtt message
     if config['frigate'].get('return_topic'):
