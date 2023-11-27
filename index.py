@@ -17,7 +17,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.7.0'
+VERSION = '1.7.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -70,6 +70,8 @@ def set_sublabel(frigate_url, frigate_event, sublabel):
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
 def code_project(image):
+    global score
+
     api_url = config['code_project'].get('api_url')
 
     response = requests.post(
@@ -93,6 +95,8 @@ def code_project(image):
     return plate_number, score
 
 def plate_recognizer(image):
+    global score
+
     api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
 
@@ -203,7 +207,7 @@ def on_message(client, userdata, message):
     _LOGGER.debug(f"Getting image for event: {frigate_event}" )
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
-    response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
+    response = requests.get(snapshot_url, params={ "crop": 0, "quality": 100 })
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
