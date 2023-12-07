@@ -1,9 +1,7 @@
-name: Build and Push Docker Image
+name: Build and Push Docker Image Production
 
 on:
   push:
-    branches:
-      - '*'
     tags:
       - '*'
 
@@ -29,18 +27,11 @@ jobs:
 
     - name: Determine TAG_NAME
       run: |
-        if [[ $GITHUB_REF == refs/heads/master ]]; then
-          echo "TAG_NAME=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
-        else
-          echo "TAG_NAME=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-        fi
+        echo "TAG_NAME=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
   
     - name: Prepare Docker Tags
       run: |
-        DOCKER_TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:${TAG_NAME}"
-        if [[ $GITHUB_REF == refs/heads/master ]]; then
-          DOCKER_TAGS="$DOCKER_TAGS,${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:latest"
-        fi
+        DOCKER_TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:latest"
         echo "DOCKER_TAGS=$DOCKER_TAGS" >> $GITHUB_ENV
 
     - name: Build and push
