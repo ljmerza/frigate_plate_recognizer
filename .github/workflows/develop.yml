@@ -35,6 +35,11 @@ jobs:
       run: |
         DOCKER_TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:${TAG_NAME}"
         echo "DOCKER_TAGS=$DOCKER_TAGS" >> $GITHUB_ENV
+        
+    - name: Print env
+      run: |
+        echo $DOCKER_TAGS
+        echo $TAG_NAME
 
     - name: Build and push
       uses: docker/build-push-action@v2
