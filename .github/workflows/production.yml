@@ -31,7 +31,8 @@ jobs:
   
     - name: Prepare Docker Tags
       run: |
-        DOCKER_TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:latest"
+        DOCKER_TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:${TAG_NAME}"
+        DOCKER_TAGS="$DOCKER_TAGS,${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:latest"
         echo "DOCKER_TAGS=$DOCKER_TAGS" >> $GITHUB_ENV
 
     - name: Build and push
