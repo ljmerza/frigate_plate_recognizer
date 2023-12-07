@@ -1,4 +1,4 @@
-name: Build and Push Docker Image Production
+name: Build and push docker image on new tag
 
 on:
   push:
