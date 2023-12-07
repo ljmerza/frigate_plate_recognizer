@@ -7,6 +7,10 @@ on:
     tags:
       - '*'
 
+env:
+  DOCKERHUB_USERNAME: 'lmerza'
+  DOCKERHUB_REPO: 'frigate_plate_recognizer'
+        
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -20,19 +24,24 @@ jobs:
     - name: Login to DockerHub
       uses: docker/login-action@v1
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        username: ${{ env.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
     - name: Determine TAG_NAME
-      id: tag_name
       run: |
         if [[ $GITHUB_REF == refs/heads/master ]]; then
-          TAG_NAME=$(git describe --tags --abbrev=0)
+          echo "TAG_NAME=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
         else
-          TAG_NAME=$(git rev-parse --short HEAD)
+          echo "TAG_NAME=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
         fi
-        echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
-        echo "::set-output name=TAG_NAME::$TAG_NAME"
+  
+    - name: Prepare Docker Tags
+      run: |
+        DOCKER_TAGS="${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:${TAG_NAME}"
+        if [[ $GITHUB_REF == refs/heads/master ]]; then
+          DOCKER_TAGS="$DOCKER_TAGS,${{ env.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_REPO }}:latest"
+        fi
+        echo "DOCKER_TAGS=$DOCKER_TAGS" >> $GITHUB_ENV
 
     - name: Build and push
       uses: docker/build-push-action@v2
@@ -40,6 +49,5 @@ jobs:
         context: .
         file: ./Dockerfile
         push: true
-        tags: yourdockerhubusername/yourrepository:${{ steps.tag_name.outputs.TAG_NAME }}
-        build-args: |
-          TAG_NAME=${{ steps.tag_name.outputs.TAG_NAME }}
+        tags: ${{ env.DOCKER_TAGS }}
+        build-args: TAG_NAME=${{ env.TAG_NAME }}
