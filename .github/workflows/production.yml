@@ -49,3 +49,13 @@ jobs:
         push: true
         tags: ${{ env.DOCKER_TAGS }}
         build-args: TAG_NAME=${{ env.TAG_NAME }}
+    
+    # - name: Create Release
+    #   id: create_release
+    #   uses: ncipollo/release-action@v1
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    #   with:
+    #     draft: false
+    #     prerelease: false
+    #     generateReleaseNotes: true
