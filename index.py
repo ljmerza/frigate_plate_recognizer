@@ -1,6 +1,7 @@
 #!/bin/python3
 
 from datetime import datetime
+import os
 
 import sqlite3
 import time
@@ -17,7 +18,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.7.1'
+VERSION = os.getenv("TAG_NAME")
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'

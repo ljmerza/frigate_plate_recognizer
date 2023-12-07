@@ -1,7 +1,9 @@
 FROM python:3.9
 
-# RUN addgroup --system app && adduser --system --group app
-# USER app
+WORKDIR /usr/src/app
+
+ARG TAG_NAME
+ENV TAG_NAME=${TAG_NAME}
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
