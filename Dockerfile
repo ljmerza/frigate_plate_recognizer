@@ -10,4 +10,5 @@ RUN pip install -r requirements.txt
 
 COPY index.py .
 
-ENTRYPOINT  ["python", "./index.py"]
+ENTRYPOINT  ["python"]
+CMD ["./index.py"]
