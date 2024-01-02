@@ -150,10 +150,6 @@ def save_image(after_data, snapshot_url, plate_number):
         return
     
     image = Image.open(io.BytesIO(bytearray(response.content)))
-    
-    image_width, image_height = image.size
-    _LOGGER.debug(f"Image Size: {image_width}, {image_height}")
-    
     last_detection = datetime.now().strftime(DATETIME_FORMAT)
     
     if(config['frigate'].get('frigate_plus', False)):
@@ -164,23 +160,17 @@ def save_image(after_data, snapshot_url, plate_number):
             return
 
     draw = ImageDraw.Draw(image)
-    
     vehicle = (
         license_plate_attribute[0]['box'][0],
         license_plate_attribute[0]['box'][1],
         license_plate_attribute[0]['box'][2],
         license_plate_attribute[0]['box'][3]
     )
-
     text = plate_number.upper()
-    font= ImageFont.truetype("./config/Arial.ttf", size=14)
-    
-    
+    font= ImageFont.truetype("./Arial.ttf", size=14)
     _LOGGER.debug(f"Drawing box: {vehicle}")
-    
     draw.rectangle(vehicle, outline="red", width=2)
     draw.text((license_plate_attribute[0]['box'][0]+5,license_plate_attribute[0]['box'][3]+5),text, font=font)
-
     latest_snapshot_path = f"{snapshot_path}/{after_data['camera']}_latest.png"
     image.save(latest_snapshot_path)
     
