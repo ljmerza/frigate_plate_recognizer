@@ -18,7 +18,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = os.getenv("TAG_NAME")
+VERSION = '1.7.4'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
