@@ -108,7 +108,7 @@ Logs will be in `/config/frigate_plate_recognizer.log`
 
 ### Synology Diskstation
 
-Ayone trying this on Synology Diskstation, you need to set the volumes to point to `/usr/src/app/config` not just `/config`
+Anyone trying this on Synology Diskstation, you need to set the volumes to point to `/usr/src/app/config` not just `/config`
 
 ### Save Snapshot Images to Path
 

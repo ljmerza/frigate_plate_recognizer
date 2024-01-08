@@ -331,7 +331,7 @@ def setup_db():
             detection_time TIMESTAMP NOT NULL,
             score TEXT NOT NULL,
             plate_number TEXT NOT NULL,
-            frigate_event TEXT NOT NULL UNIQUE, F
+            frigate_event TEXT NOT NULL UNIQUE,
             camera_name TEXT NOT NULL
         )    
     """)
