@@ -140,7 +140,7 @@ def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
 
 def save_image(after_data, snapshot_url, plate_number):
-    _LOGGER.info(f"Saving image file: {snapshot_url}")
+    _LOGGER.debug(f"Saving image file: {snapshot_url}")
     _LOGGER.debug(f"Saving image data: {after_data}")
     response = requests.get(snapshot_url, params={ "crop": 0, "quality": 95})
 
@@ -172,9 +172,10 @@ def save_image(after_data, snapshot_url, plate_number):
     draw.rectangle(vehicle, outline="red", width=2)
     draw.text((license_plate_attribute[0]['box'][0]+5,license_plate_attribute[0]['box'][3]+5),text, font=font)
     latest_snapshot_path = f"{snapshot_path}/{after_data['camera']}_latest.png"
+    _LOGGER.info(f"Saving image snapshot: {latest_snapshot_path}")
     image.save(latest_snapshot_path)
     
-    if config['plate_recognizer']['save_timestamped_file']:
+    if config['frigate']['save_timestamped_file']:
         timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{last_detection}.png"
         image.save(timestamp_save_path)
         _LOGGER.debug("platerecognizer saved file %s", timestamp_save_path)
@@ -316,8 +317,8 @@ def on_message(client, userdata, message):
             })
             
     # save image
-    if config['plate_recognizer']['save_snapshots']:
-        if (plate_number is not None and min_score and score > min_score) or config['plate_recognizer']['always_save_latest_file']:
+    if config['frigate']['save_snapshots']:
+        if (plate_number is not None and min_score and score > min_score) or config['frigate']['always_save_latest_file']:
             save_image(after_data, snapshot_url, plate_number)
 
         

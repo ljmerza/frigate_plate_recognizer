@@ -115,7 +115,7 @@ Anyone trying this on Synology Diskstation, you need to set the volumes to point
 If you want frigate-plate-recognizer to automatically save snapshots of recognized plates, add the following to your config.yml:
 
 ```yml
-plate_recognizer:
+frigate:
   save_snapshots: True #Saves a snapshot called [Camera Name]_latest.png
   save_timestamped_file: True #Optional - will also save a timestamped version of the snapshot
   always_save_latest_file: False #Optional - will save a snapshot of every event sent to frigate_plate_recognizer, even if no plate is detected
