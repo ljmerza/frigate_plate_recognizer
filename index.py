@@ -176,7 +176,10 @@ def save_image(after_data, snapshot_url, plate_number):
     image.save(latest_snapshot_path)
     
     if config['frigate']['save_timestamped_file']:
-        timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{last_detection}.png"
+        if plate_number is not None:
+            timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{plate_number}_{last_detection}.png"
+        else:
+            timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{last_detection}.png"
         image.save(timestamp_save_path)
         _LOGGER.debug("platerecognizer saved file %s", timestamp_save_path)
         
