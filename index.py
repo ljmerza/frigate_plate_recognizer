@@ -140,7 +140,7 @@ def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
 
 def save_image(after_data, snapshot_url, plate_number):
-    _LOGGER.debug(f"Saving image file: {snapshot_url}")
+    _LOGGER.info(f"Getting image file: {snapshot_url}")
     _LOGGER.debug(f"Saving image data: {after_data}")
     response = requests.get(snapshot_url, params={ "crop": 0, "quality": 95})
 
@@ -181,7 +181,7 @@ def save_image(after_data, snapshot_url, plate_number):
         else:
             timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{last_detection}.png"
         image.save(timestamp_save_path)
-        _LOGGER.info("platerecognizer saved file %s", timestamp_save_path)
+        _LOGGER.info("Platerecognizer saved timestamped file %s", timestamp_save_path)
         
     
 
@@ -194,7 +194,7 @@ def on_message(client, userdata, message):
 
     # get frigate event payload
     payload_dict = json.loads(message.payload)
-    _LOGGER.debug(f'mqtt message: {payload_dict}')
+    # _LOGGER.debug(f'mqtt message: {payload_dict}')
 
     before_data = payload_dict.get('before', {})
     after_data = payload_dict.get('after', {})
@@ -208,7 +208,7 @@ def on_message(client, userdata, message):
 
     # Check if either both match (when both are defined) or at least one matches (when only one is defined)
     if not (matching_zone and matching_camera):
-        _LOGGER.debug(f"Skipping event: {after_data['id']} because it does not match the configured zones/cameras")
+        # _LOGGER.debug(f"Skipping event: {after_data['id']} because it does not match the configured zones/cameras")
         return
 
     # check if it is a valid object
