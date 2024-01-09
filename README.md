@@ -109,3 +109,30 @@ Logs will be in `/config/frigate_plate_recognizer.log`
 ### Synology Diskstation
 
 Anyone trying this on Synology Diskstation, you need to set the volumes to point to `/usr/src/app/config` not just `/config`
+
+### Save Snapshot Images to Path
+
+If you want frigate-plate-recognizer to automatically save snapshots of recognized plates, add the following to your config.yml:
+
+```yml
+frigate:
+  save_snapshots: True #Saves a snapshot called [Camera Name]_latest.png
+  save_timestamped_file: True #Optional - will also save a timestamped version of the snapshot
+  always_save_latest_file: False #Optional - will save a snapshot of every event sent to frigate_plate_recognizer, even if no plate is detected
+```
+
+Snapshots will be saved into the '/plates' directory within your container - to access them directly, map an additional volume within your docker-compose, e.g.:
+
+```yml
+services:
+  frigate_plate_recognizer:
+    image: lmerza/frigate_plate_recognizer:latest
+    container_name: frigate_plate_recognizer
+    volumes:
+      - /path/to/config:/config
+      - /path/to/plates:/plates:rw
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+```
+
