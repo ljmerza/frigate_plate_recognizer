@@ -185,7 +185,7 @@ def get_license_plate(config, after_data):
     if(config['frigate'].get('frigate_plus', False)):
         attributes = after_data.get('current_attributes', [])
         license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']   
-        return licence_plate_attribute 
+        return license_plate_attribute 
     else:
         return None
 
