@@ -152,12 +152,10 @@ def save_image(after_data, snapshot_url, plate_number):
     image = Image.open(io.BytesIO(bytearray(response.content)))
     last_detection = datetime.now().strftime(DATETIME_FORMAT)
     
-    if(config['frigate'].get('frigate_plus', False)):
-        attributes = after_data.get('current_attributes', [])
-        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
-        if not any(license_plate_attribute):
-            _LOGGER.debug(f"no license_plate attribute found in event attributes")
-            return
+    license_plate_attribute = get_license_plate(config, after_data)  
+    if not any(license_plate_attribute):
+        _LOGGER.debug(f"no license_plate attribute found in event attributes")
+        return
 
     draw = ImageDraw.Draw(image)
     vehicle = (
@@ -175,7 +173,7 @@ def save_image(after_data, snapshot_url, plate_number):
     _LOGGER.debug(f"Saving image snapshot: {latest_snapshot_path}")
     image.save(latest_snapshot_path)
     
-if config['frigate'].get('save_timestamped_file', False):
+    if config['frigate'].get('save_timestamped_file', False):
         if plate_number is not None:
             timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{text}_{last_detection}.png"
         else:
@@ -183,7 +181,13 @@ if config['frigate'].get('save_timestamped_file', False):
         image.save(timestamp_save_path)
         _LOGGER.info("Platerecognizer saved timestamped file %s", timestamp_save_path)
         
-    
+def get_license_plate(config, after_data):
+    if(config['frigate'].get('frigate_plus', False)):
+        attributes = after_data.get('current_attributes', [])
+        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']   
+        return licence_plate_attribute 
+    else:
+        return None
 
 def on_message(client, userdata, message):
     global first_message
@@ -194,7 +198,7 @@ def on_message(client, userdata, message):
 
     # get frigate event payload
     payload_dict = json.loads(message.payload)
-    # _LOGGER.debug(f'mqtt message: {payload_dict}')
+    _LOGGER.debug(f'mqtt message: {payload_dict}')
 
     before_data = payload_dict.get('before', {})
     after_data = payload_dict.get('after', {})
@@ -208,7 +212,7 @@ def on_message(client, userdata, message):
 
     # Check if either both match (when both are defined) or at least one matches (when only one is defined)
     if not (matching_zone and matching_camera):
-        # _LOGGER.debug(f"Skipping event: {after_data['id']} because it does not match the configured zones/cameras")
+        _LOGGER.debug(f"Skipping event: {after_data['id']} because it does not match the configured zones/cameras")
         return
 
     # check if it is a valid object
@@ -275,7 +279,7 @@ def on_message(client, userdata, message):
         plate_number, score = code_project(response.content)
     else:
         _LOGGER.error("Plate Recognizer is not configured")
-        return    
+        return
 
     if plate_number is None:
         _LOGGER.info(f'No plate number found for event {frigate_event}')
@@ -320,8 +324,9 @@ def on_message(client, userdata, message):
             })
             
     # save image
-    if config['frigate']['save_snapshots']:
-        if (plate_number is not None and min_score and score > min_score) or config['frigate']['always_save_latest_file']:
+    if config['frigate'].get('save_snapshots', False):
+        
+        if (plate_number is not None and min_score and score > min_score) or config['frigate'].get('always_save_latest_file',False):
             save_image(after_data, snapshot_url, plate_number)
 
         
