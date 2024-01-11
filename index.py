@@ -175,7 +175,7 @@ def save_image(after_data, snapshot_url, plate_number):
     _LOGGER.debug(f"Saving image snapshot: {latest_snapshot_path}")
     image.save(latest_snapshot_path)
     
-    if config['frigate']['save_timestamped_file']:
+if config['frigate'].get('save_timestamped_file', False):
         if plate_number is not None:
             timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{text}_{last_detection}.png"
         else:
