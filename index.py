@@ -13,6 +13,10 @@ import sys
 import json
 import requests
 
+import io
+from pathlib import Path
+from PIL import Image, ImageDraw, UnidentifiedImageError, ImageFont
+
 mqtt_client = None
 config = None
 first_message = True
@@ -23,6 +27,9 @@ VERSION = '1.7.4'
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
+SNAPSHOT_PATH = './plates/'
+
+DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
@@ -132,6 +139,56 @@ def send_mqtt_message(message):
 def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
 
+def save_image(after_data, snapshot_url, plate_number):
+    _LOGGER.info(f"Getting image file: {snapshot_url}")
+    _LOGGER.debug(f"Saving image data: {after_data}")
+    response = requests.get(snapshot_url, params={ "crop": 0, "quality": 95})
+
+    # Check if the request was successful (HTTP status code 200)
+    if response.status_code != 200:
+        _LOGGER.error(f"Error getting snapshot: {response.status_code}")
+        return
+    
+    image = Image.open(io.BytesIO(bytearray(response.content)))
+    last_detection = datetime.now().strftime(DATETIME_FORMAT)
+    
+    license_plate_attribute = get_license_plate(config, after_data)  
+    if not any(license_plate_attribute):
+        _LOGGER.debug(f"no license_plate attribute found in event attributes")
+        return
+
+    draw = ImageDraw.Draw(image)
+    vehicle = (
+        license_plate_attribute[0]['box'][0],
+        license_plate_attribute[0]['box'][1],
+        license_plate_attribute[0]['box'][2],
+        license_plate_attribute[0]['box'][3]
+    )
+    text = plate_number.upper()
+    font= ImageFont.truetype("./Arial.ttf", size=14)
+    _LOGGER.debug(f"Drawing box: {vehicle}")
+    draw.rectangle(vehicle, outline="red", width=2)
+    draw.text((license_plate_attribute[0]['box'][0]+5,license_plate_attribute[0]['box'][3]+5),text, font=font)
+    latest_snapshot_path = f"{snapshot_path}/{after_data['camera']}_latest.png"
+    _LOGGER.debug(f"Saving image snapshot: {latest_snapshot_path}")
+    image.save(latest_snapshot_path)
+    
+    if config['frigate'].get('save_timestamped_file', False):
+        if plate_number is not None:
+            timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{text}_{last_detection}.png"
+        else:
+            timestamp_save_path = f"{snapshot_path}/{after_data['camera']}_{last_detection}.png"
+        image.save(timestamp_save_path)
+        _LOGGER.info("Platerecognizer saved timestamped file %s", timestamp_save_path)
+        
+def get_license_plate(config, after_data):
+    if(config['frigate'].get('frigate_plus', False)):
+        attributes = after_data.get('current_attributes', [])
+        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']   
+        return license_plate_attribute 
+    else:
+        return None
+
 def on_message(client, userdata, message):
     global first_message
     if first_message:
@@ -214,6 +271,7 @@ def on_message(client, userdata, message):
     # try to get plate number
     plate_number = None
     score = None
+    is_valid_plate = True
 
     if config.get('plate_recognizer'):
         plate_number, score = plate_recognizer(response.content)
@@ -225,45 +283,53 @@ def on_message(client, userdata, message):
 
     if plate_number is None:
         _LOGGER.info(f'No plate number found for event {frigate_event}')
-        return
+        is_valid_plate = False
 
     # check score
     min_score = config['frigate'].get('min_score')
-    if min_score and score < min_score:
-        _LOGGER.info(f"Score is below minimum: {score}")
-        return
+    if min_score and score:
+        if score < min_score:
+            _LOGGER.info(f"Score is below minimum: {score}")
+            is_valid_plate = False
 
     
+    if is_valid_plate:
+        # get db connection
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
 
-    # get db connection
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+        # Insert a new record of plate number
+        _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {score}")
 
-    # Insert a new record of plate number
-    _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {score}")
+        start_time = datetime.fromtimestamp(after_data['start_time'])
+        formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        cursor.execute("""
+            INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)
+        """, (formatted_start_time, score, plate_number, frigate_event, after_data['camera']))
+        conn.commit()
+        conn.close()
 
-    start_time = datetime.fromtimestamp(after_data['start_time'])
-    formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
-    
-    cursor.execute("""
-        INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)
-    """, (formatted_start_time, score, plate_number, frigate_event, after_data['camera']))
-    conn.commit()
-    conn.close()
+        # set the sublabel
+        set_sublabel(frigate_url, frigate_event, plate_number, score)
 
-    # set the sublabel
-    set_sublabel(frigate_url, frigate_event, plate_number, score)
+        # send mqtt message
+        if config['frigate'].get('return_topic'):
+            send_mqtt_message({
+                'plate_number': plate_number,
+                'score': score,
+                'frigate_event': frigate_event,
+                'camera_name': after_data['camera'],
+                'start_time': formatted_start_time
+            })
+            
+    # save image
+    if config['frigate'].get('save_snapshots', False):
+        
+        if (plate_number is not None and min_score and score > min_score) or config['frigate'].get('always_save_latest_file',False):
+            save_image(after_data, snapshot_url, plate_number)
 
-    # send mqtt message
-    if config['frigate'].get('return_topic'):
-        send_mqtt_message({
-            'plate_number': plate_number,
-            'score': score,
-            'frigate_event': frigate_event,
-            'camera_name': after_data['camera'],
-            'start_time': formatted_start_time
-        })
-
+        
 
 def setup_db():
     conn = sqlite3.connect(DB_PATH)
@@ -284,8 +350,14 @@ def setup_db():
 
 def load_config():
     global config
+    global snapshot_path
     with open(CONFIG_PATH, 'r') as config_file:
         config = yaml.safe_load(config_file)
+    
+    if SNAPSHOT_PATH:
+        snapshot_path = Path(SNAPSHOT_PATH)      
+        if not os.path.isdir(SNAPSHOT_PATH):
+            os.makedirs(SNAPSHOT_PATH)  
 
 
 def run_mqtt_client():
