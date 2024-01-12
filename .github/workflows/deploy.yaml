@@ -3,9 +3,8 @@ name: Deploy to Docker Hub
 on:
   workflow_dispatch:
   push:
-    branches:
-      - 'master'
-
+    tags:
+      - '*'
 jobs:
   docker:
     runs-on: ubuntu-latest
