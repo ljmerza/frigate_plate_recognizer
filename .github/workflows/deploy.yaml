@@ -5,6 +5,7 @@ on:
   push:
     tags:
       - '*'
+      
 jobs:
   test:
     runs-on: ubuntu-latest
