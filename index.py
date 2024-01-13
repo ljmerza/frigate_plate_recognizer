@@ -163,6 +163,7 @@ def save_image(config, after_data, image_content, license_plate_attribute, plate
     # save image
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
     image_path = f"{snapshot_path}/{after_data['camera']}_{timestamp}.png"
+    _LOGGER.debug(f"Saving image with path: {image_path}")
     image.save(image_path)
         
 def get_license_plate(config, after_data):
