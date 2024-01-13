@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.2'
+VERSION = '1.8.3'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -139,7 +139,7 @@ def has_common_value(array1, array2):
 
 def save_image(config, after_data, image_content, license_plate_attribute, plate_number):
     if not config['frigate'].get('save_snapshots', False):
-        logger.debug(f"Skipping saving snapshot because save_snapshots is set to false")
+        _LOGGER.debug(f"Skipping saving snapshot because save_snapshots is set to false")
         return
 
     image = Image.open(io.BytesIO(bytearray(image_content)))
@@ -148,13 +148,13 @@ def save_image(config, after_data, image_content, license_plate_attribute, plate
 
     # if given a plate number then draw it on the image along with the box around it
     if license_plate_attribute and config['frigate'].get('draw_box', False):
-        _LOGGER.debug(f"Drawing box: {vehicle}")
         vehicle = (
             license_plate_attribute[0]['box'][0],
             license_plate_attribute[0]['box'][1],
             license_plate_attribute[0]['box'][2],
             license_plate_attribute[0]['box'][3]
         )
+        _LOGGER.debug(f"Drawing box: {vehicle}")
         draw.rectangle(vehicle, outline="red", width=2)
 
         if plate_number:

@@ -22,7 +22,76 @@ class TestLoadConfig(unittest.TestCase):
         mock_safe_load.assert_called_once()
         mock_isdir.assert_called_once_with('dummy_snapshot_path')
         mock_makedirs.assert_called_once_with('dummy_snapshot_path')
-        
+
+class TestSaveImage(unittest.TestCase):
+    def setUp(self):
+      index._LOGGER = logging.getLogger(__name__)
+
+    @patch('index.Image.open')
+    @patch('index.ImageDraw.Draw')
+    @patch('index.ImageFont.truetype')
+    @patch('index.datetime')
+    @patch('index.open', new_callable=mock_open)
+    def test_save_image(self, mock_file, mock_datetime, mock_truetype, mock_draw, mock_open):
+        # Mock current time
+        mock_now = mock_datetime.now.return_value
+        mock_now.strftime.return_value = '20210101_120000'
+
+        # Setup configuration and input data
+        index.config = {'frigate': {'save_snapshots': True, 'draw_box': True}}
+        after_data = {'camera': 'test_camera'}
+        image_content = b'test_image_content'
+        license_plate_attribute = [{'box': [0, 0, 100, 100]}]
+        plate_number = 'ABC123'
+
+        # Mock PIL dependencies
+        mock_image = MagicMock()
+        mock_open.return_value = mock_image
+        mock_draw.return_value = MagicMock()
+        mock_truetype.return_value = MagicMock()
+
+        # Set a dummy snapshot path
+        index.snapshot_path = 'dummy/snapshot/path'
+
+        # Call the function
+        index.save_image(index.config, after_data, image_content, license_plate_attribute, plate_number)
+
+        # Assert image operations
+        mock_image.save.assert_called_with('dummy/snapshot/path/test_camera_20210101_120000.png')
+        mock_draw.return_value.rectangle.assert_called_with((0, 0, 100, 100), outline='red', width=2)
+        mock_draw.return_value.text.assert_called_with((5, 105), 'ABC123', font=mock_truetype.return_value)
+
+    @patch('index.Image.open')
+    @patch('index.ImageDraw.Draw')
+    @patch('index.ImageFont.truetype')
+    @patch('index.datetime')
+    @patch('index.open', new_callable=mock_open)
+    def test_save_image_with_save_snapshots_false(self, mock_file, mock_datetime, mock_truetype, mock_draw, mock_open):
+        mock_now = mock_datetime.now.return_value
+        mock_now.strftime.return_value = '20210101_120000'
+
+        index.config = {'frigate': {'save_snapshots': False }}
+        after_data = {}
+        image_content = b'test_image_content'
+        license_plate_attribute = []
+        plate_number = ''
+
+        # Mock PIL dependencies
+        mock_image = MagicMock()
+        mock_open.return_value = mock_image
+        mock_draw.return_value = MagicMock()
+        mock_truetype.return_value = MagicMock()
+
+        index.snapshot_path = 'dummy/snapshot/path'
+
+        # Call the function
+        with patch.object(index._LOGGER, 'debug') as mock_debug:
+            index.save_image(index.config, after_data, image_content, license_plate_attribute, plate_number)
+            mock_debug.assert_called_with(f"Skipping saving snapshot because save_snapshots is set to false")
+
+        # Assert that the image is not saved when save_snapshots is False
+        mock_image.save.assert_not_called()
+
 class TestSetSubLabel(unittest.TestCase):
     def setUp(self):
       index._LOGGER = MagicMock()
@@ -167,6 +236,7 @@ class TestGetLicensePlate(unittest.TestCase):
         after_data = {'current_attributes': []}
         result = index.get_license_plate(index.config, after_data)
         self.assertEqual(result, [])
+
 
    
 if __name__ == '__main__':
