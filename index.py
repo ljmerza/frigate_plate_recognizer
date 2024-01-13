@@ -140,7 +140,7 @@ def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
 
 def save_image(config, after_data, image_content, license_plate_attribute, plate_number):
-    if not config['frigate'].get('save_snapshots', False)
+    if not config['frigate'].get('save_snapshots', False):
         logger.debug(f"Skipping saving snapshot because save_snapshots is set to false")
         return
 
