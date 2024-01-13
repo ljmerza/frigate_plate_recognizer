@@ -39,7 +39,6 @@ def on_connect(mqtt_client, userdata, flags, rc):
     _LOGGER.info("MQTT Connected")
     mqtt_client.subscribe(config['frigate']['main_topic'] + "/events")
 
-
 def on_disconnect(mqtt_client, userdata, rc):
     if rc != 0:
         _LOGGER.warning("Unexpected disconnection, trying to reconnect")
@@ -52,7 +51,6 @@ def on_disconnect(mqtt_client, userdata, rc):
                 time.sleep(60)
     else:
         _LOGGER.error("Expected disconnection")
-
 
 def set_sublabel(frigate_url, frigate_event, sublabel, score):
     post_url = f"{frigate_url}/api/events/{frigate_event}/sub_label"
@@ -326,7 +324,6 @@ def setup_db():
     conn.commit()
     conn.close()
 
-
 def load_config():
     global config
     global snapshot_path
@@ -337,7 +334,6 @@ def load_config():
         snapshot_path = Path(SNAPSHOT_PATH)      
         if not os.path.isdir(SNAPSHOT_PATH):
             os.makedirs(SNAPSHOT_PATH)  
-
 
 def run_mqtt_client():
     global mqtt_client
@@ -360,7 +356,6 @@ def run_mqtt_client():
     mqtt_client.connect(config['frigate']['mqtt_server'])
     mqtt_client.loop_forever()
 
-
 def load_logger():
     global _LOGGER
     _LOGGER = logging.getLogger(__name__)
@@ -382,7 +377,6 @@ def load_logger():
     # Add the handlers to the logger
     _LOGGER.addHandler(console_handler)
     _LOGGER.addHandler(file_handler)
-
 
 def main():
     load_config()
