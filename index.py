@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.1'
+VERSION = '1.8.2'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -212,6 +212,7 @@ def on_message(client, userdata, message):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return
 
+    frigate_url = config['frigate']['frigate_url']
     snapshot_url = f"{frigate_url}/api/events/{frigate_event}/snapshot.jpg"
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
@@ -237,7 +238,6 @@ def on_message(client, userdata, message):
 
     # get frigate event
     frigate_event = after_data['id']
-    frigate_url = config['frigate']['frigate_url']
 
     # see if we have already processed this event
     conn = sqlite3.connect(DB_PATH)
