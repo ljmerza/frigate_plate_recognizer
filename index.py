@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.0'
+VERSION = '1.8.1'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -140,7 +140,7 @@ def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
 
 def save_image(config, after_data, image_content, license_plate_attribute, plate_number):
-    if not config['frigate'].get('save_snapshots', False)
+    if not config['frigate'].get('save_snapshots', False):
         logger.debug(f"Skipping saving snapshot because save_snapshots is set to false")
         return
 
