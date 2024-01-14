@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.2'
+VERSION = '1.8.3'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -39,7 +39,6 @@ def on_connect(mqtt_client, userdata, flags, rc):
     _LOGGER.info("MQTT Connected")
     mqtt_client.subscribe(config['frigate']['main_topic'] + "/events")
 
-
 def on_disconnect(mqtt_client, userdata, rc):
     if rc != 0:
         _LOGGER.warning("Unexpected disconnection, trying to reconnect")
@@ -52,7 +51,6 @@ def on_disconnect(mqtt_client, userdata, rc):
                 time.sleep(60)
     else:
         _LOGGER.error("Expected disconnection")
-
 
 def set_sublabel(frigate_url, frigate_event, sublabel, score):
     post_url = f"{frigate_url}/api/events/{frigate_event}/sub_label"
@@ -141,7 +139,7 @@ def has_common_value(array1, array2):
 
 def save_image(config, after_data, image_content, license_plate_attribute, plate_number):
     if not config['frigate'].get('save_snapshots', False):
-        logger.debug(f"Skipping saving snapshot because save_snapshots is set to false")
+        _LOGGER.debug(f"Skipping saving snapshot because save_snapshots is set to false")
         return
 
     image = Image.open(io.BytesIO(bytearray(image_content)))
@@ -150,13 +148,13 @@ def save_image(config, after_data, image_content, license_plate_attribute, plate
 
     # if given a plate number then draw it on the image along with the box around it
     if license_plate_attribute and config['frigate'].get('draw_box', False):
-        _LOGGER.debug(f"Drawing box: {vehicle}")
         vehicle = (
             license_plate_attribute[0]['box'][0],
             license_plate_attribute[0]['box'][1],
             license_plate_attribute[0]['box'][2],
             license_plate_attribute[0]['box'][3]
         )
+        _LOGGER.debug(f"Drawing box: {vehicle}")
         draw.rectangle(vehicle, outline="red", width=2)
 
         if plate_number:
@@ -165,6 +163,7 @@ def save_image(config, after_data, image_content, license_plate_attribute, plate
     # save image
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
     image_path = f"{snapshot_path}/{after_data['camera']}_{timestamp}.png"
+    _LOGGER.debug(f"Saving image with path: {image_path}")
     image.save(image_path)
         
 def get_license_plate(config, after_data):
@@ -212,10 +211,7 @@ def on_message(client, userdata, message):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
         return
 
-    # get frigate event
-    frigate_event = after_data['id']
     frigate_url = config['frigate']['frigate_url']
-    
     snapshot_url = f"{frigate_url}/api/events/{frigate_event}/snapshot.jpg"
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
@@ -238,6 +234,9 @@ def on_message(client, userdata, message):
         if license_plate_attribute[0]['score'] < license_plate_min_score:
             _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
             return
+
+    # get frigate event
+    frigate_event = after_data['id']
 
     # see if we have already processed this event
     conn = sqlite3.connect(DB_PATH)
@@ -326,7 +325,6 @@ def setup_db():
     conn.commit()
     conn.close()
 
-
 def load_config():
     global config
     global snapshot_path
@@ -337,7 +335,6 @@ def load_config():
         snapshot_path = Path(SNAPSHOT_PATH)      
         if not os.path.isdir(SNAPSHOT_PATH):
             os.makedirs(SNAPSHOT_PATH)  
-
 
 def run_mqtt_client():
     global mqtt_client
@@ -360,7 +357,6 @@ def run_mqtt_client():
     mqtt_client.connect(config['frigate']['mqtt_server'])
     mqtt_client.loop_forever()
 
-
 def load_logger():
     global _LOGGER
     _LOGGER = logging.getLogger(__name__)
@@ -382,7 +378,6 @@ def load_logger():
     # Add the handlers to the logger
     _LOGGER.addHandler(console_handler)
     _LOGGER.addHandler(file_handler)
-
 
 def main():
     load_config()
