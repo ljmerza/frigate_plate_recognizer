@@ -3,8 +3,8 @@ name: Deploy to Docker Hub
 on:
   workflow_dispatch:
   push:
-    tags:
-      - '*'
+    branches:
+      - master
       
 jobs:
   test:
