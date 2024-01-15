@@ -3,11 +3,12 @@ name: Deploy to Docker Hub
 on:
   workflow_dispatch:
   push:
-    tags:
-      - '*'
+    branches:
+      - master
       
 jobs:
   test:
+    name: Run Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -26,7 +27,8 @@ jobs:
     - name: Run tests
       run: python test.py
 
-  docker:
+  deploy_latest_to_docker:
+    name: Deploy Latest Tag to Docker Hub
     needs: test
     runs-on: ubuntu-latest
     steps:

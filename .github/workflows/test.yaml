@@ -3,14 +3,10 @@ name: Run Tests
 on:
   workflow_dispatch:
   pull_request:
-  push:
-    branches:
-      - master
-    tags:
-      - '*'
 
 jobs:
   test:
+    name: Run Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -28,25 +24,3 @@ jobs:
 
     - name: Run tests
       run: python test.py
-
-
-  docker:
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Extract Tag Name
-        id: tag_name
-        run: echo "::set-output name=tag::$(echo ${GITHUB_REF#refs/tags/})"
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag_name.outputs.tag }}
-          release_name: Release ${{ steps.tag_name.outputs.tag }}
-          draft: false
-          prerelease: false
