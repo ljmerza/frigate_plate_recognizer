@@ -26,7 +26,7 @@ VERSION = '1.8.7'
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
-SNAPSHOT_PATH = './plates'
+SNAPSHOT_PATH = '/plates'
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
@@ -51,8 +51,8 @@ def on_disconnect(mqtt_client, userdata, rc):
     else:
         _LOGGER.error("Expected disconnection")
 
-def set_sublabel(frigate_url, frigate_event, sublabel, score):
-    post_url = f"{frigate_url}/api/events/{frigate_event}/sub_label"
+def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
+    post_url = f"{frigate_url}/api/events/{frigate_event_id}/sub_label"
     _LOGGER.debug(f'sublabel: {sublabel}')
     _LOGGER.debug(f'sublabel url: {post_url}')
 
@@ -124,14 +124,14 @@ def plate_recognizer(image):
 
     return plate_number, score
 
-def send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time):
+def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
     if not config['frigate'].get('return_topic'):
         return
 
     message = {
         'plate_number': plate_number,
         'score': plate_score,
-        'frigate_event': frigate_event,
+        'frigate_event_id': frigate_event_id,
         'camera_name': after_data['camera'],
         'start_time': formatted_start_time
     }
@@ -338,6 +338,8 @@ def on_message(client, userdata, message):
     if frigate_plus and not is_valid_license_plate(after_data):
         return
 
+    license_plate_attribute = get_license_plate(after_data)
+
     plate_number, plate_score = get_plate(snapshot, after_data, license_plate_attribute)
     if not plate_number:
         return
@@ -346,9 +348,9 @@ def on_message(client, userdata, message):
     formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
     store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
-    set_sublabel(frigate_url, frigate_event, plate_number, plate_score)
+    set_sublabel(frigate_url, frigate_event_id, plate_number, plate_score)
 
-    send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time)
+    send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
     
             
 def setup_db():
