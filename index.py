@@ -2,6 +2,7 @@
 
 from datetime import datetime
 
+import os
 import sqlite3
 import time
 import logging
@@ -20,7 +21,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.5'
+VERSION = '1.8.7'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
