@@ -352,10 +352,8 @@ class TestGetSnapshot(unittest.TestCase):
         frigate_event_id = 'event123'
         frigate_url = 'http://example.com'
 
-        # Call the function
         result = index.get_snapshot(frigate_event_id, frigate_url)
 
-        # Assertions
         self.assertEqual(result, b'image_data')
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
                                              params={"crop": 1, "quality": 95})
@@ -373,10 +371,8 @@ class TestGetSnapshot(unittest.TestCase):
         frigate_event_id = 'event123'
         frigate_url = 'http://example.com'
 
-        # Call the function
         result = index.get_snapshot(frigate_event_id, frigate_url)
 
-        # Assertions
         self.assertIsNone(result)
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
                                              params={"crop": 1, "quality": 95})
