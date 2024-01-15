@@ -21,12 +21,12 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.7'
+VERSION = '1.8.8'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
-SNAPSHOT_PATH = './plates'
+SNAPSHOT_PATH = '/plates'
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
@@ -51,8 +51,8 @@ def on_disconnect(mqtt_client, userdata, rc):
     else:
         _LOGGER.error("Expected disconnection")
 
-def set_sublabel(frigate_url, frigate_event, sublabel, score):
-    post_url = f"{frigate_url}/api/events/{frigate_event}/sub_label"
+def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
+    post_url = f"{frigate_url}/api/events/{frigate_event_id}/sub_label"
     _LOGGER.debug(f'sublabel: {sublabel}')
     _LOGGER.debug(f'sublabel url: {post_url}')
 
@@ -124,14 +124,14 @@ def plate_recognizer(image):
 
     return plate_number, score
 
-def send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time):
+def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
     if not config['frigate'].get('return_topic'):
         return
 
     message = {
         'plate_number': plate_number,
         'score': plate_score,
-        'frigate_event': frigate_event,
+        'frigate_event_id': frigate_event_id,
         'camera_name': after_data['camera'],
         'start_time': formatted_start_time
     }
@@ -231,8 +231,8 @@ def get_snapshot(frigate_event_id, frigate_url):
 def get_license_plate(after_data):
     if config['frigate'].get('frigate_plus', False):
         attributes = after_data.get('current_attributes', [])
-        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']   
-        return license_plate_attribute 
+        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
+        return license_plate_attribute
     else:
         return None
 
@@ -262,7 +262,7 @@ def is_duplicate_event(frigate_event_id):
     if row is not None:
         _LOGGER.debug(f"Skipping event: {frigate_event_id} because it has already been processed")
         return True
-    
+
     return False
 
 def get_plate(snapshot, after_data, license_plate_attribute):
@@ -285,16 +285,16 @@ def get_plate(snapshot, after_data, license_plate_attribute):
     if not score_too_low or config['frigate'].get('always_save_snapshot', False):
         save_image(
             config=config,
-            after_data=after_data, 
-            image_content=snapshot, 
-            license_plate_attribute=license_plate_attribute, 
+            after_data=after_data,
+            image_content=snapshot,
+            license_plate_attribute=license_plate_attribute,
             plate_number=plate_number
         )
 
     if score_too_low:
         _LOGGER.info(f"Score is below minimum: {plate_score}")
         return None, None
-    
+
     return plate_number, plate_score
 
 def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
@@ -302,8 +302,8 @@ def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, f
     cursor = conn.cursor()
 
     _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {plate_score}")
-    
-    cursor.execute("""INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)""", 
+
+    cursor.execute("""INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)""",
         (formatted_start_time, plate_score, plate_number, frigate_event_id, after_data['camera'])
     )
 
@@ -338,6 +338,8 @@ def on_message(client, userdata, message):
     if frigate_plus and not is_valid_license_plate(after_data):
         return
 
+    license_plate_attribute = get_license_plate(after_data)
+
     plate_number, plate_score = get_plate(snapshot, after_data, license_plate_attribute)
     if not plate_number:
         return
@@ -346,15 +348,15 @@ def on_message(client, userdata, message):
     formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
     store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
-    set_sublabel(frigate_url, frigate_event, plate_number, plate_score)
+    set_sublabel(frigate_url, frigate_event_id, plate_number, plate_score)
 
-    send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time)
-    
-            
+    send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
+
+
 def setup_db():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""    
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS plates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             detection_time TIMESTAMP NOT NULL,
@@ -362,7 +364,7 @@ def setup_db():
             plate_number TEXT NOT NULL,
             frigate_event TEXT NOT NULL UNIQUE,
             camera_name TEXT NOT NULL
-        )    
+        )
     """)
     conn.commit()
     conn.close()
@@ -371,10 +373,10 @@ def load_config():
     global config
     with open(CONFIG_PATH, 'r') as config_file:
         config = yaml.safe_load(config_file)
-    
+
     if SNAPSHOT_PATH:
         if not os.path.isdir(SNAPSHOT_PATH):
-            os.makedirs(SNAPSHOT_PATH)  
+            os.makedirs(SNAPSHOT_PATH)
 
 def run_mqtt_client():
     global mqtt_client
