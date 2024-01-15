@@ -10,7 +10,13 @@ from unittest.mock import patch, MagicMock, mock_open
 
 import index
 
-class TestLoadConfig(unittest.TestCase):
+class BaseTestCase(unittest.TestCase):
+    def setUp(self):
+        mock_logger = MagicMock()
+        index._LOGGER = mock_logger
+        self.mock_logger = mock_logger
+
+class TestLoadConfig(BaseTestCase):
     @patch('os.path.isdir', return_value=False)
     @patch('os.makedirs')
     @patch('yaml.safe_load')
@@ -23,7 +29,7 @@ class TestLoadConfig(unittest.TestCase):
         mock_isdir.assert_called_once_with(index.SNAPSHOT_PATH)
         mock_makedirs.assert_called_once_with(index.SNAPSHOT_PATH)
 
-class TestSaveImage(unittest.TestCase):
+class TestSaveImage(BaseTestCase):
     def setUp(self):
       index._LOGGER = logging.getLogger(__name__)
 
@@ -89,7 +95,7 @@ class TestSaveImage(unittest.TestCase):
         # Assert that the image is not saved when save_snapshots is False
         mock_image.save.assert_not_called()
 
-class TestSetSubLabel(unittest.TestCase):
+class TestSetSubLabel(BaseTestCase):
     def setUp(self):
       index._LOGGER = MagicMock()
 
@@ -119,7 +125,7 @@ class TestSetSubLabel(unittest.TestCase):
             headers={"Content-Type": "application/json"}
         )
 
-class TestRunMqttClient(unittest.TestCase):
+class TestRunMqttClient(BaseTestCase):
     @patch('index.mqtt.Client')
     def test_run_mqtt_client(self, mock_mqtt_client):
         # Setup configuration
@@ -158,37 +164,7 @@ class TestRunMqttClient(unittest.TestCase):
         mock_client_instance.connect.assert_called_with('mqtt.example.com')
         mock_client_instance.loop_forever.assert_called()
 
-class TestSendMqttMessage(unittest.TestCase):
-    def setUp(self):
-      index.mqtt_client = MagicMock()
-
-      index.config = {
-        'logger_level': 'DEBUG',
-        'frigate': {
-          'main_topic': 'frigate',
-          'return_topic': 'return_topic'
-        }
-      }
-
-      index._LOGGER = logging.getLogger(__name__)
-      
-    def test_send_mqtt_message(self):
-      test_message = {"test": "message"}
-      with patch.object(index._LOGGER, 'debug') as mock_debug:
-        index.send_mqtt_message(test_message)
-
-        main_topic = index.config['frigate']['main_topic']
-        return_topic = index.config['frigate']['return_topic']
-        expected_topic = f'{main_topic}/{return_topic}'
-
-        index.mqtt_client.publish.assert_called_with(
-            expected_topic, json.dumps(test_message)
-        )
-
-        # Check if the logger was called correctly
-        mock_debug.assert_called_with(f"Sending MQTT message: {test_message}")
-
-class TestHasCommonValue(unittest.TestCase):
+class TestHasCommonValue(BaseTestCase):
     def test_has_common_value_with_common_elements(self):
         self.assertTrue(index.has_common_value([1, 2, 3], [3, 4, 5]))
 
@@ -204,7 +180,7 @@ class TestHasCommonValue(unittest.TestCase):
     def test_has_common_value_with_identical_arrays(self):
         self.assertTrue(index.has_common_value([1, 2, 3], [1, 2, 3]))
 
-class TestGetLicensePlate(unittest.TestCase):
+class TestGetLicensePlate(BaseTestCase):
     def test_get_license_plate_with_frigate_plus_enabled(self):
         index.config = {'frigate': {'frigate_plus': True}}
         after_data = {
@@ -234,29 +210,29 @@ class TestGetLicensePlate(unittest.TestCase):
         result = index.get_license_plate(after_data)
         self.assertEqual(result, [])
 
-class TestCheckFirstMessage(unittest.TestCase):
+class TestCheckFirstMessage(BaseTestCase):
 
     def setUp(self):
+        super().setUp()
         index.first_message = True
 
-    @patch('index._LOGGER')
-    def test_first_message_true(self, mock_logger):
+    def test_first_message_true(self):
         result = index.check_first_message()
         self.assertTrue(result)
-        mock_logger.debug.assert_called_with("Skipping first message")
+        self.mock_logger.debug.assert_called_with("Skipping first message")
 
-    @patch('index._LOGGER')
-    def test_first_message_false(self, mock_logger):
+    def test_first_message_false(self):
         index.first_message = False
         result = index.check_first_message()
         self.assertFalse(result)
-        mock_logger.debug.assert_not_called()
+        self.mock_logger.debug.assert_not_called()
 
-class TestIsDuplicateEvent(unittest.TestCase):
+class TestIsDuplicateEvent(BaseTestCase):
+    def setUp(self):
+        super().setUp()
 
     @patch('index.sqlite3.connect')
-    @patch('index._LOGGER')
-    def test_event_is_duplicate(self, mock_logger, mock_connect):
+    def test_event_is_duplicate(self, mock_connect):
         # Mocking the database connection and cursor
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -275,11 +251,10 @@ class TestIsDuplicateEvent(unittest.TestCase):
             "SELECT * FROM plates WHERE frigate_event = ?",
             (frigate_event_id,)
         )
-        mock_logger.debug.assert_called_with(f"Skipping event: {frigate_event_id} because it has already been processed")
+        self.mock_logger.debug.assert_called_with(f"Skipping event: {frigate_event_id} because it has already been processed")
 
     @patch('index.sqlite3.connect')
-    @patch('index._LOGGER')
-    def test_event_is_not_duplicate(self, mock_logger, mock_connect):
+    def test_event_is_not_duplicate(self, mock_connect):
         # Mocking the database connection and cursor
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -298,13 +273,14 @@ class TestIsDuplicateEvent(unittest.TestCase):
             "SELECT * FROM plates WHERE frigate_event = ?",
             (frigate_event_id,)
         )
-        mock_logger.debug.assert_not_called()
+        self.mock_logger.debug.assert_not_called()
 
-class TestIsValidLicensePlate(unittest.TestCase):
+class TestIsValidLicensePlate(BaseTestCase):
+    def setUp(self):
+        super().setUp()
 
     @patch('index.get_license_plate')
-    @patch('index._LOGGER')
-    def test_no_license_plate_attribute(self, mock_logger, mock_get_license_plate):
+    def test_no_license_plate_attribute(self, mock_get_license_plate):
         # Setup: No license plate attribute found
         mock_get_license_plate.return_value = []
         after_data = {'current_attributes': []}
@@ -314,22 +290,23 @@ class TestIsValidLicensePlate(unittest.TestCase):
 
         # Assertions
         self.assertFalse(result)
-        mock_logger.debug.assert_called_with("no license_plate attribute found in event attributes")
+        self.mock_logger.debug.assert_called_with("no license_plate attribute found in event attributes")
 
     @patch('index.get_license_plate')
-    @patch('index._LOGGER')
-    def test_license_plate_below_min_score(self, mock_logger, mock_get_license_plate):
+    def test_license_plate_below_min_score(self, mock_get_license_plate):
         # Setup: License plate attribute found but below minimum score
         index.config = {'frigate': {'frigate_plus': True, 'license_plate_min_score': 0.5}}
         mock_get_license_plate.return_value = [{'score': 0.4}]
         after_data = {'current_attributes': [{'label': 'license_plate', 'score': 0.4}]}
 
+        # Call the function
         result = index.is_valid_license_plate(after_data)
         self.assertFalse(result)
+        self.mock_logger.debug.assert_called_with("license_plate attribute score is below minimum: 0.4")
+
 
     @patch('index.get_license_plate')
-    @patch('index._LOGGER')
-    def test_valid_license_plate(self, mock_logger, mock_get_license_plate):
+    def test_valid_license_plate(self, mock_get_license_plate):
         # Setup: Valid license plate attribute
         index.config = {'frigate': {'license_plate_min_score': 0.5}}
         mock_get_license_plate.return_value = [{'score': 0.6}]
@@ -338,11 +315,12 @@ class TestIsValidLicensePlate(unittest.TestCase):
         result = index.is_valid_license_plate(after_data)
         self.assertTrue(result)
 
-class TestGetSnapshot(unittest.TestCase):
+class TestGetSnapshot(BaseTestCase):
+    def setUp(self):
+        super().setUp()
 
     @patch('index.requests.get')
-    @patch('index._LOGGER')
-    def test_get_snapshot_successful(self, mock_logger, mock_requests_get):
+    def test_get_snapshot_successful(self, mock_requests_get):
         # Setup mock response for successful request
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -357,12 +335,11 @@ class TestGetSnapshot(unittest.TestCase):
         self.assertEqual(result, b'image_data')
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
                                              params={"crop": 1, "quality": 95})
-        mock_logger.debug.assert_any_call(f"Getting snapshot for event: {frigate_event_id}")
-        mock_logger.debug.assert_any_call(f"event URL: {frigate_url}/api/events/{frigate_event_id}/snapshot.jpg")
+        self.mock_logger.debug.assert_any_call(f"Getting snapshot for event: {frigate_event_id}")
+        self.mock_logger.debug.assert_any_call(f"event URL: {frigate_url}/api/events/{frigate_event_id}/snapshot.jpg")
 
     @patch('index.requests.get')
-    @patch('index._LOGGER')
-    def test_get_snapshot_failure(self, mock_logger, mock_requests_get):
+    def test_get_snapshot_failure(self, mock_requests_get):
         # Setup mock response for unsuccessful request
         mock_response = MagicMock()
         mock_response.status_code = 404
@@ -376,8 +353,176 @@ class TestGetSnapshot(unittest.TestCase):
         self.assertIsNone(result)
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
                                              params={"crop": 1, "quality": 95})
-        mock_logger.error.assert_called_with(f"Error getting snapshot: 404")
+        self.mock_logger.error.assert_called_with(f"Error getting snapshot: 404")
 
+class TestCheckInvalidEvent(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        index.config = {
+            'frigate': {
+                'zones': ['zone1', 'zone2'],
+                'camera': ['camera1', 'camera2'],
+                'objects': ['car', 'bus']
+            }
+        }
+    
+
+    def test_event_invalid_zone_and_camera(self):
+        before_data = {}
+        after_data = {
+            'current_zones': ['zone3'],
+            'camera': 'camera3',
+            'label': 'car',
+            'id': 'event123',
+            'top_score': 0.8
+        }
+        result = index.check_invalid_event(before_data, after_data)
+        self.assertTrue(result)
+        self.mock_logger.debug.assert_called_with("Skipping event: event123 because it does not match the configured zones/cameras")
+
+    def test_event_invalid_object(self):
+        before_data = {}
+        after_data = {
+            'current_zones': ['zone1'],
+            'camera': 'camera1',
+            'label': 'tree',
+            'id': 'event123',
+            'top_score': 0.8
+        }
+        result = index.check_invalid_event(before_data, after_data)
+        self.assertTrue(result)
+        self.mock_logger.debug.assert_called_with("is not a correct label: tree")
+
+    def test_event_duplicate_top_score(self):
+        before_data = {'top_score': 0.8}
+        after_data = {
+            'current_zones': ['zone1'],
+            'camera': 'camera1',
+            'label': 'car',
+            'id': 'event123',
+            'top_score': 0.8
+        }
+        result = index.check_invalid_event(before_data, after_data)
+        self.assertTrue(result)
+        self.mock_logger.debug.assert_called_with("duplicated snapshot from Frigate as top_score from before and after are the same: 0.8")
+
+    def test_event_valid(self):
+        before_data = {'top_score': 0.7}
+        after_data = {
+            'current_zones': ['zone1'],
+            'camera': 'camera1',
+            'label': 'car',
+            'id': 'event123',
+            'top_score': 0.8
+        }
+        result = index.check_invalid_event(before_data, after_data)
+        self.assertFalse(result)
+        self.mock_logger.debug.assert_not_called()
+
+class TestGetPlate(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        
+    @patch('index.plate_recognizer')
+    @patch('index.save_image')
+    def test_plate_recognizer_configured(self, mock_save_image, mock_plate_recognizer):
+        # Set up configuration to use plate_recognizer
+        index.config = {'plate_recognizer': True, 'frigate': {'min_score': 0.5, 'always_save_snapshot': False}}
+        snapshot = b'image_data'
+        after_data = {'test_data': 'value'}
+        license_plate_attribute = [{'test_attr': 'value'}]
+
+        # Mock the plate_recognizer to return a specific plate number and score
+        mock_plate_recognizer.return_value = ('ABC123', 0.6)
+        result, score = index.get_plate(snapshot, after_data, license_plate_attribute)
+
+        # Assert that the correct plate number is returned
+        self.assertEqual(result, 'ABC123')
+        mock_plate_recognizer.assert_called_once_with(snapshot)
+        mock_save_image.assert_called_once()
+
+    @patch('index.plate_recognizer')
+    @patch('index.save_image')
+    def test_plate_score_too_low(self, mock_save_image, mock_plate_recognizer):
+        index.config = {'plate_recognizer': True, 'frigate': {'min_score': 0.7, 'always_save_snapshot': False}}
+        snapshot = b'image_data'
+        after_data = {'test_data': 'value'}
+        license_plate_attribute = [{'test_attr': 'value'}]
+
+        # Mock the plate_recognizer to return a plate number with a low score
+        mock_plate_recognizer.return_value = ('ABC123', 0.6)
+        result, score = index.get_plate(snapshot, after_data, license_plate_attribute)
+
+        # Assert that no plate number is returned due to low score
+        self.assertIsNone(result)
+        self.mock_logger.info.assert_called_with("Score is below minimum: 0.6")
+        mock_save_image.assert_not_called()
+
+class TestSendMqttMessage(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+
+    @patch('index.mqtt_client')
+    def test_send_mqtt_message(self, mock_mqtt_client):
+        index.config = {
+            'frigate': {
+                'main_topic': 'frigate',
+                'return_topic': 'return_topic'
+            }
+        }
+
+        plate_number = 'ABC123'
+        plate_score = 0.95
+        frigate_event = 'event123'
+        after_data = {'camera': 'camera1'}
+        formatted_start_time = '2021-01-01 12:00:00'
+
+        # Call the function
+        index.send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time)
+
+        # Construct expected message
+        expected_message = {
+            'plate_number': plate_number,
+            'score': plate_score,
+            'frigate_event': frigate_event,
+            'camera_name': after_data['camera'],
+            'start_time': formatted_start_time
+        }
+
+        # Assert that the MQTT client publish method is called correctly
+        mock_mqtt_client.publish.assert_called_with(
+            'frigate/return_topic', json.dumps(expected_message)
+        )
+
+class TestStorePlateInDb(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+
+    @patch('index.sqlite3.connect')
+    def test_store_plate_in_db(self, mock_connect):
+        # Mocking the database connection and cursor
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_connect.return_value = mock_conn
+        mock_conn.cursor.return_value = mock_cursor
+
+        plate_number = 'ABC123'
+        plate_score = 0.95
+        frigate_event_id = 'event123'
+        after_data = {'camera': 'camera1'}
+        formatted_start_time = '2021-01-01 12:00:00'
+
+        index.store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
+
+        # Assert that the correct SQL command is executed
+        mock_cursor.execute.assert_called_with(
+            """INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)""",
+            (formatted_start_time, plate_score, plate_number, frigate_event_id, after_data['camera'])
+        )
+
+        # Assert database commit and connection close
+        mock_conn.commit.assert_called_once()
+        mock_conn.close.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

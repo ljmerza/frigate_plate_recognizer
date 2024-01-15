@@ -1,7 +1,6 @@
 #!/bin/python3
 
 from datetime import datetime
-import os
 
 import sqlite3
 import time
@@ -14,7 +13,6 @@ import json
 import requests
 
 import io
-from pathlib import Path
 from PIL import Image, ImageDraw, UnidentifiedImageError, ImageFont
 
 mqtt_client = None
@@ -125,7 +123,18 @@ def plate_recognizer(image):
 
     return plate_number, score
 
-def send_mqtt_message(message):
+def send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time):
+    if not config['frigate'].get('return_topic'):
+        return
+
+    message = {
+        'plate_number': plate_number,
+        'score': plate_score,
+        'frigate_event': frigate_event,
+        'camera_name': after_data['camera'],
+        'start_time': formatted_start_time
+    }
+
     _LOGGER.debug(f"Sending MQTT message: {message}")
 
     main_topic = config['frigate']['main_topic']
@@ -255,6 +264,51 @@ def is_duplicate_event(frigate_event_id):
     
     return False
 
+def get_plate(snapshot, after_data, license_plate_attribute):
+    # try to get plate number
+    plate_number = None
+    plate_score = None
+
+    if config.get('plate_recognizer'):
+        plate_number, plate_score = plate_recognizer(snapshot)
+    elif config.get('code_project'):
+        plate_number, plate_score = code_project(snapshot)
+    else:
+        _LOGGER.error("Plate Recognizer is not configured")
+        return None, None
+
+    # check Plate Recognizer score
+    min_score = config['frigate'].get('min_score')
+    score_too_low = min_score and plate_score and plate_score < min_score
+
+    if not score_too_low or config['frigate'].get('always_save_snapshot', False):
+        save_image(
+            config=config,
+            after_data=after_data, 
+            image_content=snapshot, 
+            license_plate_attribute=license_plate_attribute, 
+            plate_number=plate_number
+        )
+
+    if score_too_low:
+        _LOGGER.info(f"Score is below minimum: {plate_score}")
+        return None, None
+    
+    return plate_number, plate_score
+
+def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {plate_score}")
+    
+    cursor.execute("""INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)""", 
+        (formatted_start_time, plate_score, plate_number, frigate_event_id, after_data['camera'])
+    )
+
+    conn.commit()
+    conn.close()
+
 def on_message(client, userdata, message):
     if check_first_message():
         return
@@ -283,63 +337,18 @@ def on_message(client, userdata, message):
     if frigate_plus and not is_valid_license_plate(after_data):
         return
 
-    # try to get plate number
-    plate_number = None
-    plate_score = None
-
-    if config.get('plate_recognizer'):
-        plate_number, score = plate_recognizer(snapshot)
-    elif config.get('code_project'):
-        plate_number, plate_score = code_project(snapshot)
-    else:
-        _LOGGER.error("Plate Recognizer is not configured")
+    plate_number, plate_score = get_plate(snapshot, after_data, license_plate_attribute)
+    if not plate_number:
         return
-
-    # check Plate Recognizer score
-    min_score = config['frigate'].get('min_score')
-    score_too_low = min_score and plate_score and plate_score < min_score
-
-    if not score_too_low or config['frigate'].get('always_save_snapshot', False):
-        save_image(
-            config=config,
-            after_data=after_data, 
-            image_content=response.content, 
-            license_plate_attribute=license_plate_attribute, 
-            plate_number=plate_number
-        )
-
-    if score_too_low:
-        _LOGGER.info(f"Score is below minimum: {score}")
-        return
-    
-    # get db connection
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # Insert a new record of plate number
-    _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {score}")
 
     start_time = datetime.fromtimestamp(after_data['start_time'])
     formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+
+    store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
+    set_sublabel(frigate_url, frigate_event, plate_number, plate_score)
+
+    send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time)
     
-    cursor.execute("""
-        INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)
-    """, (formatted_start_time, score, plate_number, frigate_event, after_data['camera']))
-    conn.commit()
-    conn.close()
-
-    # set the sublabel
-    set_sublabel(frigate_url, frigate_event, plate_number, score)
-
-    # send mqtt message
-    if config['frigate'].get('return_topic'):
-        send_mqtt_message({
-            'plate_number': plate_number,
-            'score': score,
-            'frigate_event': frigate_event,
-            'camera_name': after_data['camera'],
-            'start_time': formatted_start_time
-        })
             
 def setup_db():
     conn = sqlite3.connect(DB_PATH)
@@ -390,7 +399,7 @@ def run_mqtt_client():
 def load_logger():
     global _LOGGER
     _LOGGER = logging.getLogger(__name__)
-    _LOGGER.setLevel(config['logger_level'])
+    _LOGGER.setLevel(config.get('logger_level', 'INFO'))
 
     # Create a formatter to customize the log message format
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
