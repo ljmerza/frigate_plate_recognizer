@@ -338,5 +338,50 @@ class TestIsValidLicensePlate(unittest.TestCase):
         result = index.is_valid_license_plate(after_data)
         self.assertTrue(result)
 
+class TestGetSnapshot(unittest.TestCase):
+
+    @patch('index.requests.get')
+    @patch('index._LOGGER')
+    def test_get_snapshot_successful(self, mock_logger, mock_requests_get):
+        # Setup mock response for successful request
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.content = b'image_data'
+        mock_requests_get.return_value = mock_response
+
+        frigate_event_id = 'event123'
+        frigate_url = 'http://example.com'
+
+        # Call the function
+        result = index.get_snapshot(frigate_event_id, frigate_url)
+
+        # Assertions
+        self.assertEqual(result, b'image_data')
+        mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
+                                             params={"crop": 1, "quality": 95})
+        mock_logger.debug.assert_any_call(f"Getting snapshot for event: {frigate_event_id}")
+        mock_logger.debug.assert_any_call(f"event URL: {frigate_url}/api/events/{frigate_event_id}/snapshot.jpg")
+
+    @patch('index.requests.get')
+    @patch('index._LOGGER')
+    def test_get_snapshot_failure(self, mock_logger, mock_requests_get):
+        # Setup mock response for unsuccessful request
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_requests_get.return_value = mock_response
+
+        frigate_event_id = 'event123'
+        frigate_url = 'http://example.com'
+
+        # Call the function
+        result = index.get_snapshot(frigate_event_id, frigate_url)
+
+        # Assertions
+        self.assertIsNone(result)
+        mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
+                                             params={"crop": 1, "quality": 95})
+        mock_logger.error.assert_called_with(f"Error getting snapshot: 404")
+
+
 if __name__ == '__main__':
     unittest.main()
