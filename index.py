@@ -256,7 +256,7 @@ def is_duplicate_event(frigate_event_id):
     return False
 
 def on_message(client, userdata, message):
-    if check_first_message(message):
+    if check_first_message():
         return
 
     # get frigate event payload
