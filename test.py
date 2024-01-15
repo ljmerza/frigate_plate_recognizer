@@ -60,7 +60,7 @@ class TestSaveImage(BaseTestCase):
         index.save_image(index.config, after_data, image_content, license_plate_attribute, plate_number)
 
         # Assert image operations
-        mock_image.save.assert_called_with(f'./plates/{plate_number}_test_camera_20210101_120000.png')
+        mock_image.save.assert_called_with(f'/plates/{plate_number}_test_camera_20210101_120000.png')
         mock_draw.return_value.rectangle.assert_called_with((0, 0, 100, 100), outline='red', width=2)
         mock_draw.return_value.text.assert_called_with((5, 105), 'ABC123', font=mock_truetype.return_value)
 
@@ -478,13 +478,13 @@ class TestSendMqttMessage(BaseTestCase):
         formatted_start_time = '2021-01-01 12:00:00'
 
         # Call the function
-        index.send_mqtt_message(plate_number, plate_score, frigate_event, after_data, formatted_start_time)
+        index.send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
 
         # Construct expected message
         expected_message = {
             'plate_number': plate_number,
             'score': plate_score,
-            'frigate_event': frigate_event,
+            'frigate_event_id': frigate_event_id,
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time
         }
