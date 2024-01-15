@@ -473,7 +473,7 @@ class TestSendMqttMessage(BaseTestCase):
 
         plate_number = 'ABC123'
         plate_score = 0.95
-        frigate_event = 'event123'
+        frigate_event_id = 'event123'
         after_data = {'camera': 'camera1'}
         formatted_start_time = '2021-01-01 12:00:00'
 
