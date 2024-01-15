@@ -27,7 +27,7 @@ VERSION = '1.8.3'
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
 LOG_FILE = './config/frigate_plate_recogizer.log'
-SNAPSHOT_PATH = './plates/'
+SNAPSHOT_PATH = './plates'
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
@@ -162,32 +162,23 @@ def save_image(config, after_data, image_content, license_plate_attribute, plate
 
     # save image
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
-    image_path = f"{snapshot_path}/{after_data['camera']}_{timestamp}.png"
+    image_name = f"{after_data['camera']}_{timestamp}.png"
+    if plate_number:
+        image_name = f"{plate_number}_{image_name}"
+
+    image_path = f"{SNAPSHOT_PATH}/{image_name}"
     _LOGGER.debug(f"Saving image with path: {image_path}")
     image.save(image_path)
-        
-def get_license_plate(config, after_data):
-    if(config['frigate'].get('frigate_plus', False)):
-        attributes = after_data.get('current_attributes', [])
-        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']   
-        return license_plate_attribute 
-    else:
-        return None
 
-def on_message(client, userdata, message):
+def check_first_message():
     global first_message
     if first_message:
         first_message = False
-        _LOGGER.debug("skipping first message")
-        return
+        _LOGGER.debug("Skipping first message")
+        return True
+    return False
 
-    # get frigate event payload
-    payload_dict = json.loads(message.payload)
-    _LOGGER.debug(f'mqtt message: {payload_dict}')
-
-    before_data = payload_dict.get('before', {})
-    after_data = payload_dict.get('after', {})
-
+def check_invalid_event(before_data, after_data):
     # check if it is from the correct camera or zone
     config_zones = config['frigate'].get('zones', [])
     config_cameras = config['frigate'].get('camera', [])
@@ -198,24 +189,26 @@ def on_message(client, userdata, message):
     # Check if either both match (when both are defined) or at least one matches (when only one is defined)
     if not (matching_zone and matching_camera):
         _LOGGER.debug(f"Skipping event: {after_data['id']} because it does not match the configured zones/cameras")
-        return
+        return True
 
     # check if it is a valid object
     valid_objects = config['frigate'].get('objects', DEFAULT_OBJECTS)
     if(after_data['label'] not in valid_objects):
         _LOGGER.debug(f"is not a correct label: {after_data['label']}")
-        return
+        return True
 
     # limit api calls to plate checker api by only checking the best score for an event
     if(before_data['top_score'] == after_data['top_score']):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
-        return
+        return True
+    return False
 
-    frigate_url = config['frigate']['frigate_url']
-    snapshot_url = f"{frigate_url}/api/events/{frigate_event}/snapshot.jpg"
+def get_snapshot(frigate_event_id, frigate_url):
+    _LOGGER.debug(f"Getting snapshot for event: {frigate_event_id}")
+    snapshot_url = f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg"
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
-    _LOGGER.debug(f"Getting image for event: {frigate_event}" )
+    # get snapshot
     response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
 
     # Check if the request was successful (HTTP status code 200)
@@ -223,32 +216,71 @@ def on_message(client, userdata, message):
         _LOGGER.error(f"Error getting snapshot: {response.status_code}")
         return
 
+    return response.content
+
+def get_license_plate(after_data):
+    if config['frigate'].get('frigate_plus', False):
+        attributes = after_data.get('current_attributes', [])
+        license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']   
+        return license_plate_attribute 
+    else:
+        return None
+
+def is_valid_license_plate(after_data):
     # if user has frigate plus then check license plate attribute
-    license_plate_attribute = get_license_plate(config, after_data)
+    license_plate_attribute = get_license_plate(after_data)
     if not any(license_plate_attribute):
         _LOGGER.debug(f"no license_plate attribute found in event attributes")
-        return
+        return False
 
-        # check min score of license plate attribute
-        license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
-        if license_plate_attribute[0]['score'] < license_plate_min_score:
-            _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
-            return
+    # check min score of license plate attribute
+    license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
+    if license_plate_attribute[0]['score'] < license_plate_min_score:
+        _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
+        return False
 
-    # get frigate event
-    frigate_event = after_data['id']
+    return True
 
-    # see if we have already processed this event
+def is_duplicate_event(frigate_event_id):
+     # see if we have already processed this event
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM plates WHERE frigate_event = ?
-    """, (frigate_event,))
+    cursor.execute("""SELECT * FROM plates WHERE frigate_event = ?""", (frigate_event_id,))
     row = cursor.fetchone()
     conn.close()
 
     if row is not None:
-        _LOGGER.debug(f"Skipping event: {frigate_event} because it has already been processed")
+        _LOGGER.debug(f"Skipping event: {frigate_event_id} because it has already been processed")
+        return True
+    
+    return False
+
+def on_message(client, userdata, message):
+    if check_first_message(message):
+        return
+
+    # get frigate event payload
+    payload_dict = json.loads(message.payload)
+    _LOGGER.debug(f'mqtt message: {payload_dict}')
+
+    before_data = payload_dict.get('before', {})
+    after_data = payload_dict.get('after', {})
+
+    if check_invalid_event(before_data, after_data):
+        return
+
+    frigate_url = config['frigate']['frigate_url']
+    frigate_event_id = after_data['id']
+
+    if is_duplicate_event(frigate_event_id):
+        return
+
+    snapshot = get_snapshot(frigate_event_id, frigate_url)
+    if not snapshot:
+        return
+
+    frigate_plus = config['frigate'].get('frigate_plus', False)
+    if frigate_plus and not is_valid_license_plate(after_data):
         return
 
     # try to get plate number
@@ -256,9 +288,9 @@ def on_message(client, userdata, message):
     plate_score = None
 
     if config.get('plate_recognizer'):
-        plate_number, score = plate_recognizer(response.content)
+        plate_number, score = plate_recognizer(snapshot)
     elif config.get('code_project'):
-        plate_number, plate_score = code_project(response.content)
+        plate_number, plate_score = code_project(snapshot)
     else:
         _LOGGER.error("Plate Recognizer is not configured")
         return
@@ -327,12 +359,10 @@ def setup_db():
 
 def load_config():
     global config
-    global snapshot_path
     with open(CONFIG_PATH, 'r') as config_file:
         config = yaml.safe_load(config_file)
     
     if SNAPSHOT_PATH:
-        snapshot_path = Path(SNAPSHOT_PATH)      
         if not os.path.isdir(SNAPSHOT_PATH):
             os.makedirs(SNAPSHOT_PATH)  
 
