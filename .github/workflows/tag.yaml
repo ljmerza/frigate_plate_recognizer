@@ -8,6 +8,7 @@ on:
 
 jobs:
   test:
+    name: Run Tests
     runs-on: ubuntu-latest
 
     steps:
@@ -28,6 +29,7 @@ jobs:
 
 
   release:
+    name: Create Release
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -49,6 +51,7 @@ jobs:
           prerelease: false
   
   docker_tag:
+    name: Create Docker Tag
     needs: test
     runs-on: ubuntu-latest
     steps:
