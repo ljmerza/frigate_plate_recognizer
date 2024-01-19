@@ -189,25 +189,25 @@ class TestGetLicensePlate(BaseTestCase):
                 {'label': 'other_attribute', 'score': 0.8}
             ]
         }
-        result = index.get_license_plate(after_data)
+        result = index.get_license_plate_attribute(after_data)
         self.assertEqual(result, [{'label': 'license_plate', 'score': 0.9}])
 
     def test_get_license_plate_with_frigate_plus_disabled(self):
         index.config = {'frigate': {'frigate_plus': False}}
         after_data = {'current_attributes': [{'label': 'license_plate', 'score': 0.9}]}
-        result = index.get_license_plate(after_data)
+        result = index.get_license_plate_attribute(after_data)
         self.assertIsNone(result)
 
     def test_get_license_plate_with_no_license_plate_attribute(self):
         index.config = {'frigate': {'frigate_plus': True}}
         after_data = {'current_attributes': [{'label': 'other_attribute', 'score': 0.8}]}
-        result = index.get_license_plate(after_data)
+        result = index.get_license_plate_attribute(after_data)
         self.assertEqual(result, [])
 
     def test_get_license_plate_with_empty_attributes(self):
         index.config = {'frigate': {'frigate_plus': True}}
         after_data = {'current_attributes': []}
-        result = index.get_license_plate(after_data)
+        result = index.get_license_plate_attribute(after_data)
         self.assertEqual(result, [])
 
 class TestCheckFirstMessage(BaseTestCase):
@@ -279,7 +279,7 @@ class TestIsValidLicensePlate(BaseTestCase):
     def setUp(self):
         super().setUp()
 
-    @patch('index.get_license_plate')
+    @patch('index.get_license_plate_attribute')
     def test_no_license_plate_attribute(self, mock_get_license_plate):
         # Setup: No license plate attribute found
         mock_get_license_plate.return_value = []
@@ -292,7 +292,7 @@ class TestIsValidLicensePlate(BaseTestCase):
         self.assertFalse(result)
         self.mock_logger.debug.assert_called_with("no license_plate attribute found in event attributes")
 
-    @patch('index.get_license_plate')
+    @patch('index.get_license_plate_attribute')
     def test_license_plate_below_min_score(self, mock_get_license_plate):
         # Setup: License plate attribute found but below minimum score
         index.config = {'frigate': {'frigate_plus': True, 'license_plate_min_score': 0.5}}
@@ -305,7 +305,7 @@ class TestIsValidLicensePlate(BaseTestCase):
         self.mock_logger.debug.assert_called_with("license_plate attribute score is below minimum: 0.4")
 
 
-    @patch('index.get_license_plate')
+    @patch('index.get_license_plate_attribute')
     def test_valid_license_plate(self, mock_get_license_plate):
         # Setup: Valid license plate attribute
         index.config = {'frigate': {'license_plate_min_score': 0.5}}
@@ -335,7 +335,7 @@ class TestGetSnapshot(BaseTestCase):
         self.assertEqual(result, b'image_data')
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
                                              params={"crop": 1, "quality": 95})
-        self.mock_logger.debug.assert_any_call(f"Getting snapshot for event: {frigate_event_id}")
+        self.mock_logger.debug.assert_any_call(f"Getting snapshot for event: {frigate_event_id}, Crop: True")
         self.mock_logger.debug.assert_any_call(f"event URL: {frigate_url}/api/events/{frigate_event_id}/snapshot.jpg")
 
     @patch('index.requests.get')
