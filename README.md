@@ -16,6 +16,7 @@ frigate:
   main_topic: frigate
   return_topic: plate_recognizer
   frigate_plus: false
+  crop_image: true
   camera:
     - driveway_camera
   objects:

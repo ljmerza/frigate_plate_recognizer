@@ -21,7 +21,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.8'
+VERSION = '1.8.9'
 
 CONFIG_PATH = './config/config.yml'
 DB_PATH = './config/frigate_plate_recogizer.db'
@@ -219,7 +219,10 @@ def get_snapshot(frigate_event_id, frigate_url):
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
     # get snapshot
-    response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
+    if config['frigate']['crop_image']:
+        response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
+    else:
+        response = requests.get(snapshot_url, params={ "crop": 0, "quality": 95 })
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
