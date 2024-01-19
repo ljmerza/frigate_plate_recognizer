@@ -344,6 +344,7 @@ class TestGetSnapshot(BaseTestCase):
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_requests_get.return_value = mock_response
+        index.config = {'frigate': {'crop_image': True}}
 
         frigate_event_id = 'event123'
         frigate_url = 'http://example.com'
