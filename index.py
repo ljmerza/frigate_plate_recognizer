@@ -157,7 +157,7 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
     
     final_attribute = get_final_data(event_url)        
          
-    # get latest snapshop
+    # get latest snapshot
     snapshot = get_snapshot(frigate_event_id, frigate_url, False)
     if not snapshot:
         return
@@ -166,9 +166,8 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype("./Arial.ttf", size=14)
     
-    image_width, image_height = image.size
-    
     if final_attribute:
+        image_width, image_height = image.size
         plate = (
             final_attribute[0]['box'][0]*image_width,
             final_attribute[0]['box'][1]*image_height,
@@ -240,7 +239,7 @@ def get_snapshot(frigate_event_id, frigate_url, cropped):
 
     return response.content
 
-def get_license_plate(after_data):
+def get_license_plate_attribute(after_data):
     if config['frigate'].get('frigate_plus', False):
         attributes = after_data.get('current_attributes', [])
         license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
@@ -251,7 +250,7 @@ def get_license_plate(after_data):
 def get_final_data(event_url):
     if config['frigate'].get('frigate_plus', False):
         response = requests.get(event_url)
-        event_json=response.json()
+        event_json = response.json()
         event_data = event_json.get('data', {})
         _LOGGER.debug(f"Final Event Data: {event_data}")
     
@@ -267,7 +266,7 @@ def get_final_data(event_url):
 
 def is_valid_license_plate(after_data):
     # if user has frigate plus then check license plate attribute
-    license_plate_attribute = get_license_plate(after_data)
+    license_plate_attribute = get_license_plate_attribute(after_data)
     if not any(license_plate_attribute):
         _LOGGER.debug(f"no license_plate attribute found in event attributes")
         return False

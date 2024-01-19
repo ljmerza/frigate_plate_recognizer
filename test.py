@@ -46,8 +46,8 @@ class TestSaveImage(BaseTestCase):
         # Setup configuration and input data
         index.config = {'frigate': {'save_snapshots': True, 'draw_box': True}}
         after_data = {'camera': 'test_camera'}
-        image_content = b'test_image_content'
-        license_plate_attribute = [{'box': [0, 0, 100, 100]}]
+        frigate_url = 'http://example.com'
+        frigate_event_id = 'test_event_id'
         plate_number = 'ABC123'
 
         # Mock PIL dependencies
@@ -57,7 +57,7 @@ class TestSaveImage(BaseTestCase):
         mock_truetype.return_value = MagicMock()
 
         # Call the function
-        index.save_image(index.config, after_data, image_content, license_plate_attribute, plate_number)
+        index.save_image(index.config, after_data, frigate_url, frigate_event_id, plate_number)
 
         # Assert image operations
         mock_image.save.assert_called_with(f'/plates/{plate_number}_test_camera_20210101_120000.png')
@@ -330,7 +330,7 @@ class TestGetSnapshot(BaseTestCase):
         frigate_event_id = 'event123'
         frigate_url = 'http://example.com'
 
-        result = index.get_snapshot(frigate_event_id, frigate_url)
+        result = index.get_snapshot(frigate_event_id, frigate_url, True)
 
         self.assertEqual(result, b'image_data')
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
@@ -348,7 +348,7 @@ class TestGetSnapshot(BaseTestCase):
         frigate_event_id = 'event123'
         frigate_url = 'http://example.com'
 
-        result = index.get_snapshot(frigate_event_id, frigate_url)
+        result = index.get_snapshot(frigate_event_id, frigate_url, True)
 
         self.assertIsNone(result)
         mock_requests_get.assert_called_with(f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg",
@@ -434,7 +434,7 @@ class TestGetPlate(BaseTestCase):
 
         # Mock the plate_recognizer to return a specific plate number and score
         mock_plate_recognizer.return_value = ('ABC123', 0.6)
-        result, score = index.get_plate(snapshot, after_data, license_plate_attribute)
+        result, score = index.get_plate(snapshot, after_data)
 
         # Assert that the correct plate number is returned
         self.assertEqual(result, 'ABC123')
@@ -451,7 +451,7 @@ class TestGetPlate(BaseTestCase):
 
         # Mock the plate_recognizer to return a plate number with a low score
         mock_plate_recognizer.return_value = ('ABC123', 0.6)
-        result, score = index.get_plate(snapshot, after_data, license_plate_attribute)
+        result, score = index.get_plate(snapshot, after_data)
 
         # Assert that no plate number is returned due to low score
         self.assertIsNone(result)
