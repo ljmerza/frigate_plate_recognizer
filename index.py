@@ -143,9 +143,16 @@ def check_watched_plates(plate_number, response):
         _LOGGER.debug("Skipping checking Watched Plates because watched_plates is not set")
         return None, None
     
-    #Step 1 - test against AI candidates:
+    config_watched_plates = [x.lower() for x in config_watched_plates] #make sure watched_plates are all lower case
+    
+    #Step 1 - test if top plate is a watched plate
+    matching_plate = plate_number in config_watched_plates 
+    if matching_plate:
+        _LOGGER.debug(f"Recognised plate is a Watched Plate: {plate_number}")
+        return None, None, None   
+    
+    #Step 2 - test against AI candidates:
     for i, plate in enumerate(response): 
-        config_watched_plates = [x.lower() for x in config_watched_plates] #make sure watched_plates are all lower case
         matching_plate = plate.get('plate') in config_watched_plates
         if matching_plate:
             if config.get('plate_recognizer'):
@@ -158,7 +165,7 @@ def check_watched_plates(plate_number, response):
     
     _LOGGER.debug("No Watched Plates found from AI candidates")
     
-    #Step 2 - test against fuzzy match:
+    #Step 3 - test against fuzzy match:
     fuzzy_match = config['frigate'].get('fuzzy_match', 0) 
     if fuzzy_match == 0:
         _LOGGER.debug(f"Skipping fuzzy matching because fuzzy_match value not set in config")
