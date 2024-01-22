@@ -188,7 +188,7 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
         image_name = f"{plate_number.upper()}_{image_name}"
 
     image_path = f"{SNAPSHOT_PATH}/{image_name}"
-    _LOGGER.debug(f"Saving image with path: {image_path}")
+    _LOGGER.info(f"Saving image with path: {image_path}")
     image.save(image_path)
 
 def check_first_message():
@@ -250,6 +250,9 @@ def get_license_plate_attribute(after_data):
 def get_final_data(event_url):
     if config['frigate'].get('frigate_plus', False):
         response = requests.get(event_url)
+        if response.status_code != 200:
+            _LOGGER.error(f"Error getting final data: {response.status_code}")
+            return
         event_json = response.json()
         event_data = event_json.get('data', {})
         _LOGGER.debug(f"Final Event Data: {event_data}")
