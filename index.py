@@ -62,7 +62,7 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
         sublabel = sublabel[:20]
 
     # Submit the POST request with the JSON payload
-    payload = { "subLabel": sublabel }
+    payload = { "subLabel": str(sublabel).upper() }
     headers = { "Content-Type": "application/json" }
     response = requests.post(post_url, data=json.dumps(payload), headers=headers)
 
@@ -71,7 +71,7 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
 
     # Check for a successful response
     if response.status_code == 200:
-        _LOGGER.info(f"Sublabel set successfully to: {sublabel} with {percentscore} confidence")
+        _LOGGER.info(f"Sublabel set successfully to: {str(sublabel).upper()} with {percentscore} confidence")
     else:
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
@@ -194,17 +194,17 @@ def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, f
 
     if watched_plate:
         message = {
-            'plate_number': watched_plate,
+            'plate_number': str(watched_plate).upper(),
             'score': plate_score,
             'frigate_event_id': frigate_event_id,
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time,
             'fuzzy_score': fuzzy_score,
-            'original_plate': plate_number
+            'original_plate': str(plate_number).upper()
         }
     else:
         message = {
-            'plate_number': plate_number,
+            'plate_number': str(plate_number).upper(),
             'score': plate_score,
             'frigate_event_id': frigate_event_id,
             'camera_name': after_data['camera'],
