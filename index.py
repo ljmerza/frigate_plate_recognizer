@@ -143,7 +143,7 @@ def check_watched_plates(plate_number, response):
         _LOGGER.debug("Skipping checking Watched Plates because watched_plates is not set")
         return None, None
     
-    config_watched_plates = [x.lower() for x in config_watched_plates] #make sure watched_plates are all lower case
+    config_watched_plates = [str(x).lower() for x in config_watched_plates] #make sure watched_plates are all lower case
     
     #Step 1 - test if top plate is a watched plate
     matching_plate = plate_number in config_watched_plates 
@@ -172,7 +172,7 @@ def check_watched_plates(plate_number, response):
     max_score = 0
     best_match = None
     for candidate in config_watched_plates:
-        seq = difflib.SequenceMatcher(a=plate_number.lower(), b=candidate.lower())
+        seq = difflib.SequenceMatcher(a=str(plate_number).lower(), b=str(candidate).lower())
         if seq.ratio() > max_score: 
             max_score = seq.ratio()
             best_match = candidate
@@ -253,14 +253,14 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
         _LOGGER.debug(f"Drawing Plate Box: {plate}")
         
         if plate_number:
-            draw.text(((final_attribute[0]['box'][0]*image_width)+5,((final_attribute[0]['box'][1]+final_attribute[0]['box'][3])*image_height)+5), plate_number.upper(), font=font)      
+            draw.text(((final_attribute[0]['box'][0]*image_width)+5,((final_attribute[0]['box'][1]+final_attribute[0]['box'][3])*image_height)+5), str(plate_number).upper(), font=font)      
 
 
     # save image
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
     image_name = f"{after_data['camera']}_{timestamp}.png"
     if plate_number:
-        image_name = f"{plate_number.upper()}_{image_name}"
+        image_name = f"{str(plate_number).upper()}_{image_name}"
 
     image_path = f"{SNAPSHOT_PATH}/{image_name}"
     _LOGGER.info(f"Saving image with path: {image_path}")
