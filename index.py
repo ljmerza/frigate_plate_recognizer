@@ -148,7 +148,7 @@ def check_watched_plates(plate_number, response):
     #Step 1 - test if top plate is a watched plate
     matching_plate = plate_number in config_watched_plates 
     if matching_plate:
-        _LOGGER.debug(f"Recognised plate is a Watched Plate: {plate_number}")
+        _LOGGER.info(f"Recognised plate is a Watched Plate: {plate_number}")
         return None, None, None   
     
     #Step 2 - test against AI candidates:
@@ -160,7 +160,7 @@ def check_watched_plates(plate_number, response):
             else: 
                 if i == 0: continue  #skip first response for CodeProjet.AI as index 0 = original plate.
                 score = plate.get('confidence')
-            _LOGGER.debug(f"Watched plate found from AI candidates: {plate.get('plate')} with score {score}")
+            _LOGGER.info(f"Watched plate found from AI candidates: {plate.get('plate')} with score {score}")
             return plate.get('plate'), score, None
     
     _LOGGER.debug("No Watched Plates found from AI candidates")
@@ -178,7 +178,7 @@ def check_watched_plates(plate_number, response):
             best_match = candidate
     
     if max_score >= fuzzy_match:
-        _LOGGER.debug(f"Watched plate found from fuzzy matching: {best_match} with score {max_score}")    
+        _LOGGER.info(f"Watched plate found from fuzzy matching: {best_match} with score {max_score}")    
         return best_match, None, max_score
         
 
