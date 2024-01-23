@@ -33,6 +33,7 @@ DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
+CURRENT_EVENTS = []
 
 
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -152,7 +153,9 @@ def check_watched_plates(plate_number, response):
         return None, None, None   
     
     #Step 2 - test against AI candidates:
+    # _LOGGER.debug(f"Watched plates: {config_watched_plates}")
     for i, plate in enumerate(response): 
+        # _LOGGER.debug(f"Checking for watched plate {plate.get('plate')}")
         matching_plate = plate.get('plate') in config_watched_plates
         if matching_plate:
             if config.get('plate_recognizer'):
@@ -274,7 +277,7 @@ def check_first_message():
         return True
     return False
 
-def check_invalid_event(before_data, after_data):
+def check_invalid_event(before_data, after_data, type):
     # check if it is from the correct camera or zone
     config_zones = config['frigate'].get('zones', [])
     config_cameras = config['frigate'].get('camera', [])
@@ -293,9 +296,12 @@ def check_invalid_event(before_data, after_data):
         _LOGGER.debug(f"is not a correct label: {after_data['label']}")
         return True
 
+    # _LOGGER.debug(f"Current events: {CURRENT_EVENTS}")
     # limit api calls to plate checker api by only checking the best score for an event
-    if(before_data['top_score'] == after_data['top_score']) and not config['frigate'].get('frigate_plus', False):
-        _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
+    # if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
+    if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
+        _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']} {after_data['id']}")
+        _LOGGER.debug(f"mqtt event type: {type}")
         return True
     return False
 
@@ -342,7 +348,7 @@ def get_final_data(event_url):
         return None
     
 
-def is_valid_license_plate(after_data):
+def is_valid_license_plate(before_data, after_data):
     # if user has frigate plus then check license plate attribute
     license_plate_attribute = get_license_plate_attribute(after_data)
     if not any(license_plate_attribute):
@@ -353,6 +359,32 @@ def is_valid_license_plate(after_data):
     license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
     if license_plate_attribute[0]['score'] < license_plate_min_score:
         _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
+        return False
+    
+    
+    if before_data['snapshot'] and before_data['snapshot']['attributes']:
+        # _LOGGER.debug(f"before data attributes: {before_data['current_attributes'][0]['score']}")
+        before_license_score = before_data['snapshot']['attributes'][0]['score']
+    else:
+        before_license_score = 0
+        
+    if after_data['snapshot'] and after_data['snapshot']['attributes']:
+        # _LOGGER.debug(f"after data attributes: {after_data['current_attributes'][0]['score']}")
+        after_license_score = after_data['snapshot']['attributes'][0]['score']
+    else:
+        after_license_score = 0
+        
+    # after_license_score = after_data['attributes'][0]['score'] if after_data['attributes'] else 0
+    
+    # _LOGGER.debug(f"Current events: {CURRENT_EVENTS}")
+    # _LOGGER.debug(f"Before license score: {before_license_score}")
+    # _LOGGER.debug(f"After license score: {after_license_score}")
+    # _LOGGER.debug(f"before data: {before_data}")
+    # _LOGGER.debug(f"after data: {after_data}")
+    # limit api calls to plate checker api by only checking the best score for an event
+    # if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
+    if(before_license_score >= after_license_score and after_data['id'] in CURRENT_EVENTS):
+        _LOGGER.debug(f"duplicated snapshot from Frigate as license plate score from before greater than after: {after_license_score} {after_data['id']}")
         return False
 
     return True
@@ -389,7 +421,7 @@ def get_plate(snapshot, after_data):
     score_too_low = min_score and plate_score and plate_score < min_score
 
     if score_too_low:
-        _LOGGER.info(f"Score is below minimum: {plate_score}")
+        _LOGGER.info(f"Score is below minimum: {plate_score} ({plate_number})")
         return None, None, None, None
 
     return plate_number, plate_score, watched_plate, fuzzy_score
@@ -417,19 +449,33 @@ def on_message(client, userdata, message):
 
     before_data = payload_dict.get('before', {})
     after_data = payload_dict.get('after', {})
-
-    if check_invalid_event(before_data, after_data):
-        return
-
+    type = payload_dict.get('type','')
+    
     frigate_url = config['frigate']['frigate_url']
     frigate_event_id = after_data['id']
+    
+    if type == 'end' and after_data['id'] in CURRENT_EVENTS:
+        # _LOGGER.debug(f"Clearing event: {frigate_event_id}")
+        CURRENT_EVENTS.remove(frigate_event_id)
+        # _LOGGER.debug(f"Updated Events: {CURRENT_EVENTS}")
+    
+    if check_invalid_event(before_data, after_data, type):
+        return
+
+    # _LOGGER.debug(f'mqtt message: {payload_dict}')
 
     if is_duplicate_event(frigate_event_id):
         return
 
     frigate_plus = config['frigate'].get('frigate_plus', False)
-    if frigate_plus and not is_valid_license_plate(after_data):
+    if frigate_plus and not is_valid_license_plate(before_data, after_data):
         return
+    
+    # if not type == 'end' and after_data['id'] in CURRENT_EVENTS:
+    #     _LOGGER.debug(f"Event already in progress: {frigate_event_id}")
+    if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
+        # _LOGGER.debug(f"Adding new event: {frigate_event_id}")
+        CURRENT_EVENTS.append(frigate_event_id)
     
     snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
@@ -447,7 +493,7 @@ def on_message(client, userdata, message):
         set_sublabel(frigate_url, frigate_event_id, watched_plate if watched_plate else plate_number, plate_score)
 
         send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score)
-    
+         
     if plate_number or config['frigate'].get('always_save_snapshot', False):
         save_image(
             config=config,
