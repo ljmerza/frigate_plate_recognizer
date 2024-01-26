@@ -153,9 +153,7 @@ def check_watched_plates(plate_number, response):
         return None, None, None   
     
     #Step 2 - test against AI candidates:
-    # _LOGGER.debug(f"Watched plates: {config_watched_plates}")
     for i, plate in enumerate(response): 
-        # _LOGGER.debug(f"Checking for watched plate {plate.get('plate')}")
         matching_plate = plate.get('plate') in config_watched_plates
         if matching_plate:
             if config.get('plate_recognizer'):
@@ -296,9 +294,7 @@ def check_invalid_event(before_data, after_data, type):
         _LOGGER.debug(f"is not a correct label: {after_data['label']}")
         return True
 
-    # _LOGGER.debug(f"Current events: {CURRENT_EVENTS}")
     # limit api calls to plate checker api by only checking the best score for an event
-    # if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
     if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']} {after_data['id']}")
         _LOGGER.debug(f"mqtt event type: {type}")
@@ -363,26 +359,16 @@ def is_valid_license_plate(before_data, after_data):
     
     
     if before_data['snapshot'] and before_data['snapshot']['attributes']:
-        # _LOGGER.debug(f"before data attributes: {before_data['current_attributes'][0]['score']}")
         before_license_score = before_data['snapshot']['attributes'][0]['score']
     else:
         before_license_score = 0
         
     if after_data['snapshot'] and after_data['snapshot']['attributes']:
-        # _LOGGER.debug(f"after data attributes: {after_data['current_attributes'][0]['score']}")
         after_license_score = after_data['snapshot']['attributes'][0]['score']
     else:
         after_license_score = 0
         
-    # after_license_score = after_data['attributes'][0]['score'] if after_data['attributes'] else 0
-    
-    # _LOGGER.debug(f"Current events: {CURRENT_EVENTS}")
-    # _LOGGER.debug(f"Before license score: {before_license_score}")
-    # _LOGGER.debug(f"After license score: {after_license_score}")
-    # _LOGGER.debug(f"before data: {before_data}")
-    # _LOGGER.debug(f"after data: {after_data}")
     # limit api calls to plate checker api by only checking the best score for an event
-    # if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
     if(before_license_score >= after_license_score and after_data['id'] in CURRENT_EVENTS):
         _LOGGER.debug(f"duplicated snapshot from Frigate as license plate score from before greater than after: {after_license_score} {after_data['id']}")
         return False
@@ -418,7 +404,7 @@ def get_plate(snapshot, after_data):
 
     # check Plate Recognizer score
     min_score = config['frigate'].get('min_score')
-    score_too_low = min_score and plate_score and plate_score < min_score
+    score_too_low = min_score and plate_score and plate_score < min_score and not fuzzy_score
 
     if score_too_low:
         _LOGGER.info(f"Score is below minimum: {plate_score} ({plate_number})")
