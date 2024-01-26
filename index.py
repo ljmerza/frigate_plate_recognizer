@@ -168,8 +168,11 @@ def check_watched_plates(plate_number, response):
     
     #Step 3 - test against fuzzy match:
     fuzzy_match = config['frigate'].get('fuzzy_match', 0) 
+    
     if fuzzy_match == 0:
         _LOGGER.debug(f"Skipping fuzzy matching because fuzzy_match value not set in config")
+        return None, None, None
+    
     max_score = 0
     best_match = None
     for candidate in config_watched_plates:
@@ -178,12 +181,14 @@ def check_watched_plates(plate_number, response):
             max_score = seq.ratio()
             best_match = candidate
     
+    _LOGGER.debug(f"Best fuzzy_match: {candidate} ({best_match})")
+
     if max_score >= fuzzy_match:
         _LOGGER.info(f"Watched plate found from fuzzy matching: {best_match} with score {max_score}")    
         return best_match, None, max_score
         
 
-    _LOGGER.debug("No matching Watched Plates found")
+    _LOGGER.debug("No matching Watched Plates found.")
     #No watched_plate matches found 
     return None, None, None
             
@@ -467,6 +472,7 @@ def on_message(client, userdata, message):
     if not snapshot:
         return
 
+    _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
     plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot, after_data)
     if plate_number:
         start_time = datetime.fromtimestamp(after_data['start_time'])
