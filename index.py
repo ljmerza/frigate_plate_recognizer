@@ -372,7 +372,7 @@ def is_valid_license_plate(before_data, after_data):
         
     _LOGGER.debug(f"SCORE CHECK: Before: {before_license_score}, {before_data['attributes']['license_plate']} After: {after_license_plate_attribute[0]['score']}, {after_data['attributes']['license_plate']}")
     # limit api calls to plate checker api by only checking the best score for an event
-    if(after_license_plate_attribute[0]['score'] < after_data['attributes']['license_plate'] and not after_data['attributes']['license_plate'] == before_license_score and after_data['id'] in CURRENT_EVENTS):
+    if(after_license_plate_attribute[0]['score'] < after_data['attributes']['license_plate'] and not after_data['attributes']['license_plate'] == before_license_score and not before_license_score == 0 and after_data['id'] in CURRENT_EVENTS):
         _LOGGER.debug(f"duplicated snapshot from Frigate as license plate score from before greater than after: {after_data['attributes']['license_plate']} {after_data['id']}")
         return False
 
