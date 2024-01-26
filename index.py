@@ -181,7 +181,7 @@ def check_watched_plates(plate_number, response):
             max_score = seq.ratio()
             best_match = candidate
     
-    _LOGGER.debug(f"Best fuzzy_match: {candidate} ({best_match})")
+    _LOGGER.debug(f"Best fuzzy_match: {best_match} ({max_score})")
 
     if max_score >= fuzzy_match:
         _LOGGER.info(f"Watched plate found from fuzzy matching: {best_match} with score {max_score}")    
