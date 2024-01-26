@@ -351,31 +351,28 @@ def get_final_data(event_url):
 
 def is_valid_license_plate(before_data, after_data):
     # if user has frigate plus then check license plate attribute
-    license_plate_attribute = get_license_plate_attribute(after_data)
-    if not any(license_plate_attribute):
+    after_license_plate_attribute = get_license_plate_attribute(after_data)
+    if not any(after_license_plate_attribute):
         _LOGGER.debug(f"no license_plate attribute found in event attributes")
         return False
 
     # check min score of license plate attribute
     license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
-    if license_plate_attribute[0]['score'] < license_plate_min_score:
-        _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
+    if after_license_plate_attribute[0]['score'] < license_plate_min_score:
+        _LOGGER.debug(f"license_plate attribute score is below minimum: {after_license_plate_attribute[0]['score']}")
         return False
     
     
-    if before_data['snapshot'] and before_data['snapshot']['attributes']:
-        before_license_score = before_data['snapshot']['attributes'][0]['score']
+    before_license_plate_attribute = get_license_plate_attribute(before_data)
+    # if before_data['snapshot'] and before_data['snapshot']['attributes']:
+    if any(before_license_plate_attribute):
+        before_license_score = before_license_plate_attribute[0]['score']
     else:
         before_license_score = 0
         
-    if after_data['snapshot'] and after_data['snapshot']['attributes']:
-        after_license_score = after_data['snapshot']['attributes'][0]['score']
-    else:
-        after_license_score = 0
-        
     # limit api calls to plate checker api by only checking the best score for an event
-    if(before_license_score >= after_license_score and after_data['id'] in CURRENT_EVENTS):
-        _LOGGER.debug(f"duplicated snapshot from Frigate as license plate score from before greater than after: {after_license_score} {after_data['id']}")
+    if(before_license_score >= after_license_plate_attribute[0]['score'] and after_data['id'] in CURRENT_EVENTS):
+        _LOGGER.debug(f"duplicated snapshot from Frigate as license plate score from before greater than after: {after_license_plate_attribute[0]['score']} {after_data['id']}")
         return False
 
     return True
