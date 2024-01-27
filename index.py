@@ -372,7 +372,7 @@ def is_valid_license_plate(before_data, after_data):
         
     _LOGGER.debug(f"SCORE CHECK: Before: {before_license_score}, {before_data['attributes']['license_plate']} After: {after_license_plate_attribute[0]['score']}, {after_data['attributes']['license_plate']}")
     # limit api calls to plate checker api by only checking the best score for an event
-    if not (after_license_plate_attribute[0]['score'] == after_data['attributes']['license_plate'] and not after_data['attributes']['license_plate'] == before_license_score) and after_data['id'] in CURRENT_EVENTS:
+    if after_data['id'] in CURRENT_EVENTS and not (after_license_plate_attribute[0]['score'] == after_data['attributes']['license_plate'] and not after_data['attributes']['license_plate'] == before_license_score):
         _LOGGER.debug(f"duplicated snapshot from Frigate as license plate best score already processed: {after_data['attributes']['license_plate']} {after_data['id']}")
         return False
 
@@ -463,11 +463,12 @@ def on_message(client, userdata, message):
     # if not type == 'end' and after_data['id'] in CURRENT_EVENTS:
     #     _LOGGER.debug(f"Event already in progress: {frigate_event_id}")
     if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
-        # _LOGGER.debug(f"Adding new event: {frigate_event_id}")
+        _LOGGER.debug(f"Adding new event: {frigate_event_id}")
         CURRENT_EVENTS.append(frigate_event_id)
     
     snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
+        CURRENT_EVENTS.remove(frigate_event_id) # remove existing id from current events due to snapshot failure - will try again next frame
         return
 
     _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
