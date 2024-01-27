@@ -337,7 +337,7 @@ def get_final_data(event_url):
             return
         event_json = response.json()
         event_data = event_json.get('data', {})
-        _LOGGER.debug(f"Final Event Data: {event_data}")
+        # _LOGGER.debug(f"Final Event Data: {event_data}")
     
         if event_data:
             attributes = event_data.get('attributes', [])
@@ -463,10 +463,10 @@ def on_message(client, userdata, message):
     # if not type == 'end' and after_data['id'] in CURRENT_EVENTS:
     #     _LOGGER.debug(f"Event already in progress: {frigate_event_id}")
     if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
-        _LOGGER.debug(f"Adding new event: {frigate_event_id}")
+        # _LOGGER.debug(f"Adding new event: {frigate_event_id}")
         CURRENT_EVENTS[frigate_event_id] =  0
         
-    _LOGGER.debug(f"Current Events: {CURRENT_EVENTS}")
+    # _LOGGER.debug(f"Current Events: {CURRENT_EVENTS}")
     
     snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
@@ -476,7 +476,7 @@ def on_message(client, userdata, message):
     _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
     if frigate_event_id in CURRENT_EVENTS:
         CURRENT_EVENTS[frigate_event_id] += 1
-        _LOGGER.debug(f"Event count for {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
+        # _LOGGER.debug(f"Event count for {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
     plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot, after_data)
     if plate_number:
         start_time = datetime.fromtimestamp(after_data['start_time'])
