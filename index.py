@@ -370,7 +370,7 @@ def is_valid_license_plate(before_data, after_data):
     else:
         before_license_score = 0
         
-    _LOGGER.debug(f"SCORE CHECK: Before: {before_license_score}, {before_data['attributes']['license_plate']} After: {after_license_plate_attribute[0]['score']}, {after_data['attributes']['license_plate']}")
+    _LOGGER.debug(f"SCORE CHECK: Before: {before_license_score}, {before_data['attributes']['license_plate']} After: {after_license_plate_attribute[0]['score']}, {after_data['attributes']['license_plate']} ({CURRENT_EVENTS[after_data['id']]})")
     # limit api calls to plate checker api by only checking the best score for an event
     # if after_data['id'] in CURRENT_EVENTS and not (after_license_plate_attribute[0]['score'] == after_data['attributes']['license_plate'] and not after_data['attributes']['license_plate'] == before_license_score):
     #     _LOGGER.debug(f"duplicated snapshot from Frigate as license plate best score already processed: {after_data['attributes']['license_plate']} {after_data['id']}")
@@ -444,8 +444,8 @@ def on_message(client, userdata, message):
     frigate_event_id = after_data['id']
     
     if type == 'end' and after_data['id'] in CURRENT_EVENTS:
-        _LOGGER.debug(f"Clearing event: {frigate_event_id} after {CURRENT_EVENTS['frigate_event_id']} calls to AI engine")
-        del CURRENT_EVENTS['frigate_event_id']
+        _LOGGER.debug(f"Clearing event: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
+        del CURRENT_EVENTS[frigate_event_id]
         # _LOGGER.debug(f"Updated Events: {CURRENT_EVENTS}")
     
     if check_invalid_event(before_data, after_data, type):
@@ -464,7 +464,9 @@ def on_message(client, userdata, message):
     #     _LOGGER.debug(f"Event already in progress: {frigate_event_id}")
     if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
         _LOGGER.debug(f"Adding new event: {frigate_event_id}")
-        CURRENT_EVENTS['frigate_event_id'] =  0
+        CURRENT_EVENTS[frigate_event_id] =  0
+        
+    _LOGGER.debug(f"Current Events: {CURRENT_EVENTS}")
     
     snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
@@ -473,7 +475,8 @@ def on_message(client, userdata, message):
 
     _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
     if frigate_event_id in CURRENT_EVENTS:
-        CURRENT_EVENTS['frigate_event_id'] += 1
+        CURRENT_EVENTS[frigate_event_id] += 1
+        _LOGGER.debug(f"Event count for {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
     plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot, after_data)
     if plate_number:
         start_time = datetime.fromtimestamp(after_data['start_time'])
