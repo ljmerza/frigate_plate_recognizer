@@ -444,7 +444,7 @@ def on_message(client, userdata, message):
     frigate_event_id = after_data['id']
     
     if type == 'end' and after_data['id'] in CURRENT_EVENTS:
-        _LOGGER.debug(f"Clearing event: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
+        _LOGGER.debug(f"CLEARING EVENT: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
         del CURRENT_EVENTS[frigate_event_id]
         # _LOGGER.debug(f"Updated Events: {CURRENT_EVENTS}")
     
