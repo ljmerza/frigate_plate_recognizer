@@ -490,7 +490,7 @@ def on_message(client, userdata, message):
 
         send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score)
          
-    if plate_number or config['frigate'].get('always_save_snapshot', False):
+    if plate_number or (config['frigate'].get('always_save_snapshot', False) and not CURRENT_EVENTS[frigate_event_id]):
         save_image(
             config=config,
             after_data=after_data,
