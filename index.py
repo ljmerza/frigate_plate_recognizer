@@ -302,7 +302,7 @@ def check_invalid_event(before_data, after_data, type):
     # limit api calls to plate checker api by only checking the best score for an event
     if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']} {after_data['id']}")
-        _LOGGER.debug(f"mqtt event type: {type}")
+        # _LOGGER.debug(f"mqtt event type: {type}")
         return True
     return False
 
@@ -362,16 +362,16 @@ def is_valid_license_plate(before_data, after_data):
         _LOGGER.debug(f"license_plate attribute score is below minimum: {after_license_plate_attribute[0]['score']}")
         return False
     
-    
-    before_license_plate_attribute = get_license_plate_attribute(before_data)
-    # if before_data['snapshot'] and before_data['snapshot']['attributes']:
-    if any(before_license_plate_attribute):
-        before_license_score = before_license_plate_attribute[0]['score']
-    else:
-        before_license_score = 0
+
+    # before_license_plate_attribute = get_license_plate_attribute(before_data)
+    # # if before_data['snapshot'] and before_data['snapshot']['attributes']:
+    # if any(before_license_plate_attribute):
+    #     before_license_score = before_license_plate_attribute[0]['score']
+    # else:
+    #     before_license_score = 0
         
-    _LOGGER.debug(f"SCORE CHECK: Before: {before_license_score}, {before_data['attributes']['license_plate']} After: {after_license_plate_attribute[0]['score']}, {after_data['attributes']['license_plate']} ({CURRENT_EVENTS})")
-    _LOGGER.debug(f"TOP SCORES: Before: {before_data['top_score']} After: {after_data['top_score']} ")
+    # _LOGGER.debug(f"SCORE CHECK: Before: {before_license_score}, {before_data['attributes']['license_plate']} After: {after_license_plate_attribute[0]['score']}, {after_data['attributes']['license_plate']} ({CURRENT_EVENTS})")
+    # _LOGGER.debug(f"TOP SCORES: Before: {before_data['top_score']} After: {after_data['top_score']} ")
 
     # limit api calls to plate checker api by only checking the best score for an event
     # if after_data['id'] in CURRENT_EVENTS and not (after_license_plate_attribute[0]['score'] == after_data['attributes']['license_plate'] and not after_data['attributes']['license_plate'] == before_license_score):
