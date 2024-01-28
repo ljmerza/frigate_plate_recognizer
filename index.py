@@ -477,11 +477,11 @@ def on_message(client, userdata, message):
 
     _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
     if frigate_event_id in CURRENT_EVENTS:
+        if config['frigate'].get('max_attempts', 0) > 0 and CURRENT_EVENTS[frigate_event_id] > config['frigate'].get('max_attempts', 0):
+            _LOGGER.debug(f"Maximum number of AI attempts reached for event {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
+            return
         CURRENT_EVENTS[frigate_event_id] += 1
         # _LOGGER.debug(f"Event count for {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
-        if CURRENT_EVENTS[frigate_event_id] > config['frigate'].get('max_attempts', 0):
-            _LOGGER.debug(f"Maximum number of AI attempts reached for event {CURRENT_EVENTS[frigate_event_id]}: {config['frigate'].get('max_attempts', 0)}")
-            return
 
     plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot, after_data)
     if plate_number:
