@@ -29,7 +29,7 @@ DB_PATH = '/config/frigate_plate_recogizer.db'
 LOG_FILE = '/config/frigate_plate_recogizer.log'
 SNAPSHOT_PATH = '/plates'
 
-DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
+DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
@@ -496,7 +496,7 @@ def on_message(client, userdata, message):
 
         send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score)
          
-    if plate_number or (config['frigate'].get('always_save_snapshot', False) and not CURRENT_EVENTS[frigate_event_id]):
+    if plate_number or config['frigate'].get('always_save_snapshot', False):
         save_image(
             config=config,
             after_data=after_data,
