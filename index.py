@@ -147,7 +147,7 @@ def check_watched_plates(plate_number, response):
     config_watched_plates = [str(x).lower() for x in config_watched_plates] #make sure watched_plates are all lower case
     
     #Step 1 - test if top plate is a watched plate
-    matching_plate = plate_number in config_watched_plates 
+    matching_plate = plate_number.lower() in config_watched_plates 
     if matching_plate:
         _LOGGER.info(f"Recognised plate is a Watched Plate: {plate_number}")
         return None, None, None   
