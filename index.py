@@ -279,7 +279,7 @@ def check_first_message():
         return True
     return False
 
-def check_invalid_event(before_data, after_data, type):
+def check_invalid_event(before_data, after_data):
     # check if it is from the correct camera or zone
     config_zones = config['frigate'].get('zones', [])
     config_cameras = config['frigate'].get('camera', [])
@@ -346,7 +346,7 @@ def get_final_data(event_url):
         return None
     
 
-def is_valid_license_plate(before_data, after_data):
+def is_valid_license_plate(after_data):
     # if user has frigate plus then check license plate attribute
     after_license_plate_attribute = get_license_plate_attribute(after_data)
     if not any(after_license_plate_attribute):
@@ -375,7 +375,7 @@ def is_duplicate_event(frigate_event_id):
 
     return False
 
-def get_plate(snapshot, after_data):
+def get_plate(snapshot):
     # try to get plate number
     plate_number = None
     plate_score = None
@@ -430,14 +430,14 @@ def on_message(client, userdata, message):
         _LOGGER.debug(f"CLEARING EVENT: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
         del CURRENT_EVENTS[frigate_event_id]
     
-    if check_invalid_event(before_data, after_data, type):
+    if check_invalid_event(before_data, after_data):
         return
 
     if is_duplicate_event(frigate_event_id):
         return
 
     frigate_plus = config['frigate'].get('frigate_plus', False)
-    if frigate_plus and not is_valid_license_plate(before_data, after_data):
+    if frigate_plus and not is_valid_license_plate(after_data):
         return
     
     if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
@@ -456,7 +456,7 @@ def on_message(client, userdata, message):
             return
         CURRENT_EVENTS[frigate_event_id] += 1
 
-    plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot, after_data)
+    plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot)
     if plate_number:
         start_time = datetime.fromtimestamp(after_data['start_time'])
         formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")

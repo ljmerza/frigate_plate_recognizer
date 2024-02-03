@@ -108,7 +108,7 @@ class TestSetSubLabel(BaseTestCase):
 
         mock_post.assert_called_with(
             "http://example.com/api/events/123/sub_label",
-            data='{"subLabel": "test_label"}',
+            data='{"subLabel": "TEST_LABEL"}',
             headers={"Content-Type": "application/json"}
         )
 
@@ -121,7 +121,7 @@ class TestSetSubLabel(BaseTestCase):
 
         mock_post.assert_called_with(
             "http://example.com/api/events/123/sub_label",
-            data='{"subLabel": "test_label_too_long_"}',
+            data='{"subLabel": "TEST_LABEL_TOO_LONG_"}',
             headers={"Content-Type": "application/json"}
         )
 
@@ -394,6 +394,7 @@ class TestCheckInvalidEvent(BaseTestCase):
         self.mock_logger.debug.assert_called_with("is not a correct label: tree")
 
     def test_event_duplicate_top_score(self):
+        index.config = {'plate_recognizer': True, 'frigate': {'frigate_plus': False}}
         before_data = {'top_score': 0.8}
         after_data = {
             'current_zones': ['zone1'],
@@ -433,11 +434,14 @@ class TestGetPlate(BaseTestCase):
         license_plate_attribute = [{'test_attr': 'value'}]
 
         # Mock the plate_recognizer to return a specific plate number and score
-        mock_plate_recognizer.return_value = ('ABC123', 0.6)
-        result, score = index.get_plate(snapshot, after_data)
+        mock_plate_recognizer.return_value = ('ABC123', 0.6, 'ABCI23', 0.7)
+        plate_number, plate_score, watched_plate, fuzzy_score = index.get_plate(snapshot)
 
         # Assert that the correct plate number is returned
-        self.assertEqual(result, 'ABC123')
+        self.assertEqual(plate_number, 'ABC123')
+        self.assertEqual(plate_score, 0.6)
+        self.assertEqual(watched_plate, 'ABCI23')
+        self.assertEqual(fuzzy_score, 0.7)
         mock_plate_recognizer.assert_called_once_with(snapshot)
         mock_save_image.assert_called_once()
 
@@ -451,10 +455,13 @@ class TestGetPlate(BaseTestCase):
 
         # Mock the plate_recognizer to return a plate number with a low score
         mock_plate_recognizer.return_value = ('ABC123', 0.6)
-        result, score = index.get_plate(snapshot, after_data)
+        plate_number, plate_score, watched_plate, fuzzy_score = index.get_plate(snapshot)
 
         # Assert that no plate number is returned due to low score
-        self.assertIsNone(result)
+        self.assertIsNone(plate_number)
+        self.assertIsNone(plate_score)
+        self.assertIsNone(watched_plate)
+        self.assertIsNone(fuzzy_score)
         self.mock_logger.info.assert_called_with("Score is below minimum: 0.6")
         mock_save_image.assert_not_called()
 
@@ -476,9 +483,11 @@ class TestSendMqttMessage(BaseTestCase):
         frigate_event_id = 'event123'
         after_data = {'camera': 'camera1'}
         formatted_start_time = '2021-01-01 12:00:00'
+        watched_plate = 'ABC123'
+        fuzzy_score = 0.8
 
         # Call the function
-        index.send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
+        index.send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score)
 
         # Construct expected message
         expected_message = {
@@ -486,7 +495,9 @@ class TestSendMqttMessage(BaseTestCase):
             'score': plate_score,
             'frigate_event_id': frigate_event_id,
             'camera_name': after_data['camera'],
-            'start_time': formatted_start_time
+            'start_time': formatted_start_time,
+            'original_plate': watched_plate,
+            'fuzzy_score': fuzzy_score
         }
 
         # Assert that the MQTT client publish method is called correctly
