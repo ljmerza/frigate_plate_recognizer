@@ -454,7 +454,7 @@ class TestGetPlate(BaseTestCase):
         license_plate_attribute = [{'test_attr': 'value'}]
 
         # Mock the plate_recognizer to return a plate number with a low score
-        mock_plate_recognizer.return_value = ('ABC123', 0.6)
+        mock_plate_recognizer.return_value = ('ABC123', 0.6, 'ABCI23', 0.7)
         plate_number, plate_score, watched_plate, fuzzy_score = index.get_plate(snapshot)
 
         # Assert that no plate number is returned due to low score
@@ -496,8 +496,8 @@ class TestSendMqttMessage(BaseTestCase):
             'frigate_event_id': frigate_event_id,
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time,
-            'original_plate': watched_plate,
-            'fuzzy_score': fuzzy_score
+            'fuzzy_score': fuzzy_score,
+            'original_plate': watched_plate
         }
 
         # Assert that the MQTT client publish method is called correctly
