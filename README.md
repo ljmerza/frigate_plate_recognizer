@@ -145,6 +145,6 @@ frigate:
   fuzzy_match: 0.8 # default is test against plate-recognizer / CP.AI 'candidates' only, but can specify a min score for fuzzy matching if no candidates match watched plates from 0 - 1 for example 0.8
 ```
 
-If a watched plate is found in the list of candidates plates returned by plate-recognizer / CP.AI, the response will be updated to use that plate amd its score. The original plate will be added to the MQTT response as an additional `original_plate` field.
+If a watched plate is found in the list of candidates plates returned by plate-recognizer / CP.AI, the response will be updated to use that plate and it's score. The original plate will be added to the MQTT response as an additional `original_plate` field.
 
 If no candidates match and fuzzy_match is enabled with a value, the recognized plate is compared against each of the watched_plates using fuzzy matching. If a plate is found with a score > fuzzy_match, the response will be updated with that plate. The original plate and the associated fuzzy_score will be added to the MQTT response as additional fields `original_plate` and `fuzzy_score`.
