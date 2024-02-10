@@ -62,17 +62,18 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
     if len(sublabel) > 20:
         sublabel = sublabel[:20]
 
+    sublabel = str(sublabel).upper() # plates are always upper cased
+
     # Submit the POST request with the JSON payload
-    payload = { "subLabel": str(sublabel).upper() }
+    payload = { "subLabel": sublabel }
     headers = { "Content-Type": "application/json" }
     response = requests.post(post_url, data=json.dumps(payload), headers=headers)
 
-
-    percentscore = "{:.1%}".format(score)
+    percent_score = "{:.1%}".format(score)
 
     # Check for a successful response
     if response.status_code == 200:
-        _LOGGER.info(f"Sublabel set successfully to: {str(sublabel).upper()} with {percentscore} confidence")
+        _LOGGER.info(f"Sublabel set successfully to: {sublabel} with {percent_score} confidence")
     else:
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
@@ -147,7 +148,7 @@ def check_watched_plates(plate_number, response):
     config_watched_plates = [str(x).lower() for x in config_watched_plates] #make sure watched_plates are all lower case
     
     #Step 1 - test if top plate is a watched plate
-    matching_plate = plate_number.lower() in config_watched_plates 
+    matching_plate = str(plate_number).lower() in config_watched_plates 
     if matching_plate:
         _LOGGER.info(f"Recognised plate is a Watched Plate: {plate_number}")
         return None, None, None   
@@ -236,7 +237,7 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
     # get latest Event Data from Frigate API
     event_url = f"{frigate_url}/api/events/{frigate_event_id}"
     
-    final_attribute = get_final_data(event_url)        
+    final_attribute = get_final_data(event_url) 
          
     # get latest snapshot
     snapshot = get_snapshot(frigate_event_id, frigate_url, False)
@@ -249,17 +250,29 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
     
     if final_attribute:
         image_width, image_height = image.size
+        dimension_1 = int(final_attribute[0]['box'][0])
+        dimension_2 = int(final_attribute[0]['box'][1])
+        dimension_3 = int(final_attribute[0]['box'][2])
+        dimension_4 = int(final_attribute[0]['box'][3])
+
         plate = (
-            final_attribute[0]['box'][0]*image_width,
-            final_attribute[0]['box'][1]*image_height,
-            (final_attribute[0]['box'][0]+final_attribute[0]['box'][2])*image_width,
-            (final_attribute[0]['box'][1]+final_attribute[0]['box'][3])*image_height
-        )    
+            dimension_1 * image_width,
+            dimension_2 * image_height,
+            (dimension_1 + dimension_3) * image_width,
+            (dimension_2 + dimension_4) * image_height
+        )
         draw.rectangle(plate, outline="red", width=2) 
         _LOGGER.debug(f"Drawing Plate Box: {plate}")
         
         if plate_number:
-            draw.text(((final_attribute[0]['box'][0]*image_width)+5,((final_attribute[0]['box'][1]+final_attribute[0]['box'][3])*image_height)+5), str(plate_number).upper(), font=font)      
+            draw.text(
+                (
+                    (dimension_1 * image_width)+  5,
+                    ((dimension_2 + dimension_4) * image_height) + 5
+                ), 
+                str(plate_number).upper(), 
+                font=font
+            )      
 
     # save image
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
@@ -390,9 +403,9 @@ def get_plate(snapshot):
 
     # check Plate Recognizer score
     min_score = config['frigate'].get('min_score')
-    score_too_low = min_score and plate_score and plate_score < min_score and not fuzzy_score
+    score_too_low = min_score and plate_score and plate_score < min_score
 
-    if score_too_low:
+    if not fuzzy_score and score_too_low:
         _LOGGER.info(f"Score is below minimum: {plate_score} ({plate_number})")
         return None, None, None, None
 
