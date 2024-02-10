@@ -61,6 +61,7 @@ frigate:
   # ... 
   frigate_plus: true
   license_plate_min_score: 0 # default is show all but can speficify a min score from 0 - 1 for example 0.8
+  max_attempts: 20 # Optional: if set, will limit the number of snapshots sent for recognition for any particular event. 
 ```
 
 If you're using CodeProject.AI, you'll need to comment out plate_recognizer in your config. Then add and update "api_url" with your CodeProject.AI Service API URL. Your config should look like:
@@ -106,10 +107,6 @@ logger_level: DEBUG
 
 Logs will be in `/config/frigate_plate_recognizer.log`
 
-### Synology Diskstation
-
-Anyone trying this on Synology Diskstation, you need to set the volumes to point to `/usr/src/app/config` not just `/config`
-
 ### Save Snapshot Images to Path
 
 If you want frigate-plate-recognizer to automatically save snapshots of recognized plates, add the following to your config.yml:
@@ -136,3 +133,18 @@ services:
       - TZ=America/New_York
 ```
 
+### Monitor Watched Plates
+
+If you want frigate-plate-recognizer to check recognized plates against a list of watched plates for close matches (including fuzzy recognition), add the following to your config.yml:
+
+```yml
+frigate:
+  watched_plates: #list of plates to watch.
+    -  ABC123
+    -  DEF456
+  fuzzy_match: 0.8 # default is test against plate-recognizer / CP.AI 'candidates' only, but can specify a min score for fuzzy matching if no candidates match watched plates from 0 - 1 for example 0.8
+```
+
+If a watched plate is found in the list of candidates plates returned by plate-recognizer / CP.AI, the response will be updated to use that plate and it's score. The original plate will be added to the MQTT response as an additional `original_plate` field.
+
+If no candidates match and fuzzy_match is enabled with a value, the recognized plate is compared against each of the watched_plates using fuzzy matching. If a plate is found with a score > fuzzy_match, the response will be updated with that plate. The original plate and the associated fuzzy_score will be added to the MQTT response as additional fields `original_plate` and `fuzzy_score`.

@@ -15,23 +15,25 @@ import requests
 
 import io
 from PIL import Image, ImageDraw, UnidentifiedImageError, ImageFont
+import difflib
 
 mqtt_client = None
 config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.8'
+VERSION = '1.8.10'
 
-CONFIG_PATH = './config/config.yml'
-DB_PATH = './config/frigate_plate_recogizer.db'
-LOG_FILE = './config/frigate_plate_recogizer.log'
+CONFIG_PATH = '/config/config.yml'
+DB_PATH = '/config/frigate_plate_recogizer.db'
+LOG_FILE = '/config/frigate_plate_recogizer.log'
 SNAPSHOT_PATH = '/plates'
 
-DATETIME_FORMAT = "%Y-%m-%d_%H-%M-%S"
+DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
+CURRENT_EVENTS = {}
 
 
 def on_connect(mqtt_client, userdata, flags, rc):
@@ -60,17 +62,18 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
     if len(sublabel) > 20:
         sublabel = sublabel[:20]
 
+    sublabel = str(sublabel).upper() # plates are always upper cased
+
     # Submit the POST request with the JSON payload
     payload = { "subLabel": sublabel }
     headers = { "Content-Type": "application/json" }
     response = requests.post(post_url, data=json.dumps(payload), headers=headers)
 
-
-    percentscore = "{:.1%}".format(score)
+    percent_score = "{:.1%}".format(score)
 
     # Check for a successful response
     if response.status_code == 200:
-        _LOGGER.info(f"Sublabel set successfully to: {sublabel} with {percentscore} confidence")
+        _LOGGER.info(f"Sublabel set successfully to: {sublabel} with {percent_score} confidence")
     else:
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
@@ -86,16 +89,22 @@ def code_project(image):
 
     if response.get('predictions') is None:
         _LOGGER.error(f"Failed to get plate number. Response: {response}")
-        return None, None
+        return None, None, None, None
 
     if len(response['predictions']) == 0:
         _LOGGER.debug(f"No plates found")
-        return None, None
+        return None, None, None, None
 
     plate_number = response['predictions'][0].get('plate')
     score = response['predictions'][0].get('confidence')
-
-    return plate_number, score
+    
+    watched_plate, watched_score, fuzzy_score = check_watched_plates(plate_number, response['predictions'])   
+    if fuzzy_score:
+        return plate_number, score, watched_plate, fuzzy_score
+    elif watched_plate: 
+        return plate_number, watched_score, watched_plate, None
+    else:
+        return plate_number, score, None, None
 
 def plate_recognizer(image):
     api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
@@ -113,28 +122,101 @@ def plate_recognizer(image):
 
     if response.get('results') is None:
         _LOGGER.error(f"Failed to get plate number. Response: {response}")
-        return None, None
+        return None, None, None, None
 
     if len(response['results']) == 0:
         _LOGGER.debug(f"No plates found")
-        return None, None
+        return None, None, None, None
 
     plate_number = response['results'][0].get('plate')
     score = response['results'][0].get('score')
+    
+    watched_plate, watched_score, fuzzy_score = check_watched_plates(plate_number, response['results'][0].get('candidates'))
+    if fuzzy_score:
+        return plate_number, score, watched_plate, fuzzy_score
+    elif watched_plate: 
+        return plate_number, watched_score, watched_plate, None
+    else:
+        return plate_number, score, None, None
 
-    return plate_number, score
+def check_watched_plates(plate_number, response):
+    config_watched_plates = config['frigate'].get('watched_plates', [])
+    if not config_watched_plates:
+        _LOGGER.debug("Skipping checking Watched Plates because watched_plates is not set")
+        return None, None
+    
+    config_watched_plates = [str(x).lower() for x in config_watched_plates] #make sure watched_plates are all lower case
+    
+    #Step 1 - test if top plate is a watched plate
+    matching_plate = str(plate_number).lower() in config_watched_plates 
+    if matching_plate:
+        _LOGGER.info(f"Recognised plate is a Watched Plate: {plate_number}")
+        return None, None, None   
+    
+    #Step 2 - test against AI candidates:
+    for i, plate in enumerate(response): 
+        matching_plate = plate.get('plate') in config_watched_plates
+        if matching_plate:
+            if config.get('plate_recognizer'):
+                score = plate.get('score')
+            else: 
+                if i == 0: continue  #skip first response for CodeProjet.AI as index 0 = original plate.
+                score = plate.get('confidence')
+            _LOGGER.info(f"Watched plate found from AI candidates: {plate.get('plate')} with score {score}")
+            return plate.get('plate'), score, None
+    
+    _LOGGER.debug("No Watched Plates found from AI candidates")
+    
+    #Step 3 - test against fuzzy match:
+    fuzzy_match = config['frigate'].get('fuzzy_match', 0) 
+    
+    if fuzzy_match == 0:
+        _LOGGER.debug(f"Skipping fuzzy matching because fuzzy_match value not set in config")
+        return None, None, None
+    
+    max_score = 0
+    best_match = None
+    for candidate in config_watched_plates:
+        seq = difflib.SequenceMatcher(a=str(plate_number).lower(), b=str(candidate).lower())
+        if seq.ratio() > max_score: 
+            max_score = seq.ratio()
+            best_match = candidate
+    
+    _LOGGER.debug(f"Best fuzzy_match: {best_match} ({max_score})")
 
-def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
+    if max_score >= fuzzy_match:
+        _LOGGER.info(f"Watched plate found from fuzzy matching: {best_match} with score {max_score}")    
+        return best_match, None, max_score
+        
+
+    _LOGGER.debug("No matching Watched Plates found.")
+    #No watched_plate matches found 
+    return None, None, None
+            
+                    
+    
+def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score):
     if not config['frigate'].get('return_topic'):
         return
 
-    message = {
-        'plate_number': plate_number,
-        'score': plate_score,
-        'frigate_event_id': frigate_event_id,
-        'camera_name': after_data['camera'],
-        'start_time': formatted_start_time
-    }
+    if watched_plate:
+        message = {
+            'plate_number': str(watched_plate).upper(),
+            'score': plate_score,
+            'frigate_event_id': frigate_event_id,
+            'camera_name': after_data['camera'],
+            'start_time': formatted_start_time,
+            'fuzzy_score': fuzzy_score,
+            'original_plate': str(plate_number).upper()
+        }
+    else:
+        message = {
+            'plate_number': str(plate_number).upper(),
+            'score': plate_score,
+            'frigate_event_id': frigate_event_id,
+            'camera_name': after_data['camera'],
+            'start_time': formatted_start_time
+        }
 
     _LOGGER.debug(f"Sending MQTT message: {message}")
 
@@ -147,37 +229,59 @@ def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, f
 def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
 
-def save_image(config, after_data, image_content, license_plate_attribute, plate_number):
+def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
     if not config['frigate'].get('save_snapshots', False):
         _LOGGER.debug(f"Skipping saving snapshot because save_snapshots is set to false")
         return
+    
+    # get latest Event Data from Frigate API
+    event_url = f"{frigate_url}/api/events/{frigate_event_id}"
+    
+    final_attribute = get_final_data(event_url) 
+         
+    # get latest snapshot
+    snapshot = get_snapshot(frigate_event_id, frigate_url, False)
+    if not snapshot:
+        return
 
-    image = Image.open(io.BytesIO(bytearray(image_content)))
+    image = Image.open(io.BytesIO(bytearray(snapshot)))
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype("./Arial.ttf", size=14)
+    
+    if final_attribute:
+        image_width, image_height = image.size
+        dimension_1 = int(final_attribute[0]['box'][0])
+        dimension_2 = int(final_attribute[0]['box'][1])
+        dimension_3 = int(final_attribute[0]['box'][2])
+        dimension_4 = int(final_attribute[0]['box'][3])
 
-    # if given a plate number then draw it on the image along with the box around it
-    if license_plate_attribute and config['frigate'].get('draw_box', False):
-        vehicle = (
-            license_plate_attribute[0]['box'][0],
-            license_plate_attribute[0]['box'][1],
-            license_plate_attribute[0]['box'][2],
-            license_plate_attribute[0]['box'][3]
+        plate = (
+            dimension_1 * image_width,
+            dimension_2 * image_height,
+            (dimension_1 + dimension_3) * image_width,
+            (dimension_2 + dimension_4) * image_height
         )
-        _LOGGER.debug(f"Drawing box: {vehicle}")
-        draw.rectangle(vehicle, outline="red", width=2)
-
+        draw.rectangle(plate, outline="red", width=2) 
+        _LOGGER.debug(f"Drawing Plate Box: {plate}")
+        
         if plate_number:
-            draw.text((license_plate_attribute[0]['box'][0]+5,license_plate_attribute[0]['box'][3]+5), plate_number, font=font)
+            draw.text(
+                (
+                    (dimension_1 * image_width)+  5,
+                    ((dimension_2 + dimension_4) * image_height) + 5
+                ), 
+                str(plate_number).upper(), 
+                font=font
+            )      
 
     # save image
     timestamp = datetime.now().strftime(DATETIME_FORMAT)
     image_name = f"{after_data['camera']}_{timestamp}.png"
     if plate_number:
-        image_name = f"{plate_number}_{image_name}"
+        image_name = f"{str(plate_number).upper()}_{image_name}"
 
     image_path = f"{SNAPSHOT_PATH}/{image_name}"
-    _LOGGER.debug(f"Saving image with path: {image_path}")
+    _LOGGER.info(f"Saving image with path: {image_path}")
     image.save(image_path)
 
 def check_first_message():
@@ -208,18 +312,18 @@ def check_invalid_event(before_data, after_data):
         return True
 
     # limit api calls to plate checker api by only checking the best score for an event
-    if(before_data['top_score'] == after_data['top_score']):
-        _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']}")
+    if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
+        _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']} {after_data['id']}")
         return True
     return False
 
-def get_snapshot(frigate_event_id, frigate_url):
-    _LOGGER.debug(f"Getting snapshot for event: {frigate_event_id}")
+def get_snapshot(frigate_event_id, frigate_url, cropped):
+    _LOGGER.debug(f"Getting snapshot for event: {frigate_event_id}, Crop: {cropped}")
     snapshot_url = f"{frigate_url}/api/events/{frigate_event_id}/snapshot.jpg"
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
     # get snapshot
-    response = requests.get(snapshot_url, params={ "crop": 1, "quality": 95 })
+    response = requests.get(snapshot_url, params={ "crop": cropped, "quality": 95 })
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
@@ -228,25 +332,44 @@ def get_snapshot(frigate_event_id, frigate_url):
 
     return response.content
 
-def get_license_plate(after_data):
+def get_license_plate_attribute(after_data):
     if config['frigate'].get('frigate_plus', False):
         attributes = after_data.get('current_attributes', [])
         license_plate_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
         return license_plate_attribute
     else:
         return None
+    
+def get_final_data(event_url):
+    if config['frigate'].get('frigate_plus', False):
+        response = requests.get(event_url)
+        if response.status_code != 200:
+            _LOGGER.error(f"Error getting final data: {response.status_code}")
+            return
+        event_json = response.json()
+        event_data = event_json.get('data', {})
+    
+        if event_data:
+            attributes = event_data.get('attributes', [])
+            final_attribute = [attribute for attribute in attributes if attribute['label'] == 'license_plate']
+            return final_attribute
+        else:
+            return None
+    else:
+        return None
+    
 
 def is_valid_license_plate(after_data):
     # if user has frigate plus then check license plate attribute
-    license_plate_attribute = get_license_plate(after_data)
-    if not any(license_plate_attribute):
+    after_license_plate_attribute = get_license_plate_attribute(after_data)
+    if not any(after_license_plate_attribute):
         _LOGGER.debug(f"no license_plate attribute found in event attributes")
         return False
 
     # check min score of license plate attribute
     license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
-    if license_plate_attribute[0]['score'] < license_plate_min_score:
-        _LOGGER.debug(f"license_plate attribute score is below minimum: {license_plate_attribute[0]['score']}")
+    if after_license_plate_attribute[0]['score'] < license_plate_min_score:
+        _LOGGER.debug(f"license_plate attribute score is below minimum: {after_license_plate_attribute[0]['score']}")
         return False
 
     return True
@@ -265,37 +388,28 @@ def is_duplicate_event(frigate_event_id):
 
     return False
 
-def get_plate(snapshot, after_data, license_plate_attribute):
+def get_plate(snapshot):
     # try to get plate number
     plate_number = None
     plate_score = None
 
     if config.get('plate_recognizer'):
-        plate_number, plate_score = plate_recognizer(snapshot)
+        plate_number, plate_score , watched_plate, fuzzy_score = plate_recognizer(snapshot)
     elif config.get('code_project'):
-        plate_number, plate_score = code_project(snapshot)
+        plate_number, plate_score, watched_plate, fuzzy_score = code_project(snapshot)
     else:
         _LOGGER.error("Plate Recognizer is not configured")
-        return None, None
+        return None, None, None, None
 
     # check Plate Recognizer score
     min_score = config['frigate'].get('min_score')
     score_too_low = min_score and plate_score and plate_score < min_score
 
-    if not score_too_low or config['frigate'].get('always_save_snapshot', False):
-        save_image(
-            config=config,
-            after_data=after_data,
-            image_content=snapshot,
-            license_plate_attribute=license_plate_attribute,
-            plate_number=plate_number
-        )
+    if not fuzzy_score and score_too_low:
+        _LOGGER.info(f"Score is below minimum: {plate_score} ({plate_number})")
+        return None, None, None, None
 
-    if score_too_low:
-        _LOGGER.info(f"Score is below minimum: {plate_score}")
-        return None, None
-
-    return plate_number, plate_score
+    return plate_number, plate_score, watched_plate, fuzzy_score
 
 def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
     conn = sqlite3.connect(DB_PATH)
@@ -320,38 +434,62 @@ def on_message(client, userdata, message):
 
     before_data = payload_dict.get('before', {})
     after_data = payload_dict.get('after', {})
-
+    type = payload_dict.get('type','')
+    
+    frigate_url = config['frigate']['frigate_url']
+    frigate_event_id = after_data['id']
+    
+    if type == 'end' and after_data['id'] in CURRENT_EVENTS:
+        _LOGGER.debug(f"CLEARING EVENT: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
+        del CURRENT_EVENTS[frigate_event_id]
+    
     if check_invalid_event(before_data, after_data):
         return
 
-    frigate_url = config['frigate']['frigate_url']
-    frigate_event_id = after_data['id']
-
     if is_duplicate_event(frigate_event_id):
-        return
-
-    snapshot = get_snapshot(frigate_event_id, frigate_url)
-    if not snapshot:
         return
 
     frigate_plus = config['frigate'].get('frigate_plus', False)
     if frigate_plus and not is_valid_license_plate(after_data):
         return
-
-    license_plate_attribute = get_license_plate(after_data)
-
-    plate_number, plate_score = get_plate(snapshot, after_data, license_plate_attribute)
-    if not plate_number:
+    
+    if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
+        CURRENT_EVENTS[frigate_event_id] =  0
+        
+    
+    snapshot = get_snapshot(frigate_event_id, frigate_url, True)
+    if not snapshot:
+        del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
         return
 
-    start_time = datetime.fromtimestamp(after_data['start_time'])
-    formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+    _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
+    if frigate_event_id in CURRENT_EVENTS:
+        if config['frigate'].get('max_attempts', 0) > 0 and CURRENT_EVENTS[frigate_event_id] > config['frigate'].get('max_attempts', 0):
+            _LOGGER.debug(f"Maximum number of AI attempts reached for event {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
+            return
+        CURRENT_EVENTS[frigate_event_id] += 1
 
-    store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
-    set_sublabel(frigate_url, frigate_event_id, plate_number, plate_score)
+    plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot)
+    if plate_number:
+        start_time = datetime.fromtimestamp(after_data['start_time'])
+        formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
+        
+        if watched_plate:
+            store_plate_in_db(watched_plate, plate_score, frigate_event_id, after_data, formatted_start_time)
+        else:
+            store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
+        set_sublabel(frigate_url, frigate_event_id, watched_plate if watched_plate else plate_number, plate_score)
 
-    send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
-
+        send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score)
+         
+    if plate_number or config['frigate'].get('always_save_snapshot', False):
+        save_image(
+            config=config,
+            after_data=after_data,
+            frigate_url=frigate_url,
+            frigate_event_id=frigate_event_id,
+            plate_number=watched_plate if watched_plate else plate_number
+        )
 
 def setup_db():
     conn = sqlite3.connect(DB_PATH)
