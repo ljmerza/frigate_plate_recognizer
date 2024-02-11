@@ -529,9 +529,9 @@ def run_mqtt_client():
     mqtt_client.on_connect = on_connect
 
     # check if we are using authentication and set username/password if so
-    if config['frigate'].get('mqtt_auth', False):
+    if config['frigate'].get('mqtt_username', False):
         username = config['frigate']['mqtt_username']
-        password = config['frigate']['mqtt_password']
+        password = config['frigate'].get('mqtt_password', '')
         mqtt_client.username_pw_set(username, password)
 
     mqtt_client.connect(config['frigate']['mqtt_server'])

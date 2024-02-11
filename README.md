@@ -10,7 +10,6 @@ Create a `config.yml` file in your docker volume with the following contents:
 frigate:
   frigate_url: http://127.0.0.1:5000
   mqtt_server: 127.0.0.1
-  mqtt_auth: false
   mqtt_username: username
   mqtt_password: password
   main_topic: frigate
