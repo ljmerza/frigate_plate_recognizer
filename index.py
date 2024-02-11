@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.10'
+VERSION = '1.8.11'
 
 CONFIG_PATH = '/config/config.yml'
 DB_PATH = '/config/frigate_plate_recogizer.db'
@@ -529,7 +529,7 @@ def run_mqtt_client():
     mqtt_client.on_connect = on_connect
 
     # check if we are using authentication and set username/password if so
-    if config['frigate']['mqtt_auth']:
+    if config['frigate'].get('mqtt_auth', False):
         username = config['frigate']['mqtt_username']
         password = config['frigate']['mqtt_password']
         mqtt_client.username_pw_set(username, password)
