@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.11'
+VERSION = '1.8.12'
 
 CONFIG_PATH = '/config/config.yml'
 DB_PATH = '/config/frigate_plate_recogizer.db'
@@ -143,7 +143,7 @@ def check_watched_plates(plate_number, response):
     config_watched_plates = config['frigate'].get('watched_plates', [])
     if not config_watched_plates:
         _LOGGER.debug("Skipping checking Watched Plates because watched_plates is not set")
-        return None, None
+        return None, None, None
     
     config_watched_plates = [str(x).lower() for x in config_watched_plates] #make sure watched_plates are all lower case
     
@@ -151,7 +151,7 @@ def check_watched_plates(plate_number, response):
     matching_plate = str(plate_number).lower() in config_watched_plates 
     if matching_plate:
         _LOGGER.info(f"Recognised plate is a Watched Plate: {plate_number}")
-        return None, None, None   
+        return None, None, None  
     
     #Step 2 - test against AI candidates:
     for i, plate in enumerate(response): 
@@ -192,8 +192,6 @@ def check_watched_plates(plate_number, response):
     _LOGGER.debug("No matching Watched Plates found.")
     #No watched_plate matches found 
     return None, None, None
-            
-                    
     
 def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score):
     if not config['frigate'].get('return_topic'):
