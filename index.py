@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.12'
+VERSION = '1.8.13'
 
 CONFIG_PATH = '/config/config.yml'
 DB_PATH = '/config/frigate_plate_recogizer.db'
@@ -248,10 +248,10 @@ def save_image(config, after_data, frigate_url, frigate_event_id, plate_number):
     
     if final_attribute:
         image_width, image_height = image.size
-        dimension_1 = int(final_attribute[0]['box'][0])
-        dimension_2 = int(final_attribute[0]['box'][1])
-        dimension_3 = int(final_attribute[0]['box'][2])
-        dimension_4 = int(final_attribute[0]['box'][3])
+        dimension_1 = final_attribute[0]['box'][0]
+        dimension_2 = final_attribute[0]['box'][1]
+        dimension_3 = final_attribute[0]['box'][2]
+        dimension_4 = final_attribute[0]['box'][3]
 
         plate = (
             dimension_1 * image_width,
