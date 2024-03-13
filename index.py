@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.13'
+VERSION = '1.8.14'
 
 CONFIG_PATH = '/config/config.yml'
 DB_PATH = '/config/frigate_plate_recogizer.db'
@@ -439,7 +439,8 @@ def on_message(client, userdata, message):
     
     if type == 'end' and after_data['id'] in CURRENT_EVENTS:
         _LOGGER.debug(f"CLEARING EVENT: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
-        del CURRENT_EVENTS[frigate_event_id]
+        if frigate_event_id in CURRENT_EVENTS:
+            del CURRENT_EVENTS[frigate_event_id]
     
     if check_invalid_event(before_data, after_data):
         return
@@ -457,7 +458,8 @@ def on_message(client, userdata, message):
     
     snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
-        del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
+        if frigate_event_id in CURRENT_EVENTS:
+            del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
         return
 
     _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
