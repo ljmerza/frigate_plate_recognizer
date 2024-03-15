@@ -10,6 +10,7 @@ Create a `config.yml` file in your docker volume with the following contents:
 frigate:
   frigate_url: http://127.0.0.1:5000
   mqtt_server: 127.0.0.1
+  mqtt_port: 1883 # Optional. Default shown.
   mqtt_username: username
   mqtt_password: password
   main_topic: frigate
@@ -22,7 +23,7 @@ frigate:
   min_score: .8
 plate_recognizer:
   token: xxxxxxxxxx
-  regions: 
+  regions:
     - us-ca
 logger_level: INFO
 ```
@@ -37,7 +38,7 @@ You can specify a custom url for the plate_recognizer api by adding `api_url` to
 plate_recognizer:
   api_url: http://HOST-IP:8080/v1/plate-reader
   token: xxxxxxxxxx
-  regions: 
+  regions:
     - us-ca
 ```
 
@@ -57,10 +58,10 @@ If you have a custom model with Frigate+ then it's able to detect license plates
 
 ```yaml
 frigate:
-  # ... 
+  # ...
   frigate_plus: true
   license_plate_min_score: 0 # default is show all but can speficify a min score from 0 - 1 for example 0.8
-  max_attempts: 20 # Optional: if set, will limit the number of snapshots sent for recognition for any particular event. 
+  max_attempts: 20 # Optional: if set, will limit the number of snapshots sent for recognition for any particular event.
 ```
 
 If you're using CodeProject.AI, you'll need to comment out plate_recognizer in your config. Then add and update "api_url" with your CodeProject.AI Service API URL. Your config should look like:
@@ -68,7 +69,7 @@ If you're using CodeProject.AI, you'll need to comment out plate_recognizer in y
 ```yml
 #plate_recognizer:
 #  token: xxxxxxxxxx
-#  regions: 
+#  regions:
 #    - us-ca
 code_project:
   api_url: http://127.0.0.1:32168/v1/image/alpr
