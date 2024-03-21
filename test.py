@@ -172,7 +172,7 @@ class TestRunMqttClient(BaseTestCase):
         mock_client_instance.username_pw_set.assert_called_with('username', 'password')
 
         # Assert that the client attempts to connect and enters the loop
-        mock_client_instance.connect.assert_called_with('mqtt.example.com')
+        mock_client_instance.connect.assert_called_with('mqtt.example.com', 1883)
         mock_client_instance.loop_forever.assert_called()
 
 class TestHasCommonValue(BaseTestCase):
