@@ -225,7 +225,7 @@ def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, f
             'frigate_event_id': frigate_event_id,
             'camera_name': after_data['camera'],
             'start_time': formatted_start_time,
-            'is_watched_plate': True,
+            'is_watched_plate': False,
         }
 
     _LOGGER.debug(f"Sending MQTT message: {message}")
