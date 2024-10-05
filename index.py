@@ -43,6 +43,10 @@ on_connect_counter = prometheus_client.Counter('on_connect', 'count of connects'
 on_disconnect_counter = prometheus_client.Counter('on_disconnect', 'count of connects')
 mqtt_sends_counter = prometheus_client.Counter('mqtt_sends', 'count of sends', ['watched'])
 
+code_project_counter = prometheus_client.Counter('code_project_calls', 'count of sends')
+plate_recognizer_counter = prometheus_client.Counter('plate_recognizer_calls', 'count of sends')
+plate_recognizer_err = prometheus_client.Counter('plate_recognizer_errors', 'count of sends')
+
 def on_connect(mqtt_client, userdata, flags, rc):
     on_connect_counter.inc()
     _LOGGER.info("MQTT Connected")
@@ -87,6 +91,7 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
         _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
 
 def code_project(image):
+    code_project_counter.inc()
     api_url = config['code_project'].get('api_url')
 
     response = requests.post(
@@ -116,6 +121,7 @@ def code_project(image):
         return plate_number, score, None, None
 
 def plate_recognizer(image):
+    plate_recognizer_counter.inc()
     api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
 
@@ -130,6 +136,7 @@ def plate_recognizer(image):
     _LOGGER.debug(f"response: {response}")
 
     if response.get('results') is None:
+        plate_recognizer_errors.inc()
         _LOGGER.error(f"Failed to get plate number. Response: {response}")
         return None, None, None, None
 
