@@ -321,7 +321,8 @@ def get_snapshot(frigate_event_id, frigate_url, cropped):
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
     # get snapshot
-    response = requests.get(snapshot_url, params={ "crop": cropped, "quality": 95 })
+    cropped = 1 if cropped else 0
+    response = requests.get(snapshot_url, params={ "crop": {cropped}, "quality": 95 })
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
