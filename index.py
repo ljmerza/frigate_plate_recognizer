@@ -22,7 +22,7 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.14'
+VERSION = '2.0.0'
 
 CONFIG_PATH = '/config/config.yml'
 DB_PATH = '/config/frigate_plate_recogizer.db'
