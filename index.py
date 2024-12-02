@@ -470,6 +470,7 @@ def process_message(message):
     if after_data['has_snapshot']:
         snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
+        _LOGGER.debug(f"Event {frigate_event_id} has no snapshot")
         if frigate_event_id in CURRENT_EVENTS:
             del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
         return
