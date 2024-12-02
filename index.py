@@ -29,10 +29,10 @@ VERSION = '2.1.0'
 # set local paths for development
 LOCAL = os.getenv('LOCAL', False)
 
-CONFIG_PATH = f'{'' if LOCAL else '/'}config/config.yml'
-DB_PATH = f'{'' if LOCAL else '/'}config/frigate_plate_recogizer.db'
-LOG_FILE = f'{'' if LOCAL else '/'}config/frigate_plate_recogizer.log'
-SNAPSHOT_PATH = f'{'' if LOCAL else '/'}plates'
+CONFIG_PATH = f"{'' if LOCAL else '/'}config/config.yml"
+DB_PATH = f"{'' if LOCAL else '/'}config/frigate_plate_recogizer.db"
+LOG_FILE = f"{'' if LOCAL else '/'}config/frigate_plate_recogizer.log"
+SNAPSHOT_PATH = f"{'' if LOCAL else '/'}plates"
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
