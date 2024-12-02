@@ -1,7 +1,7 @@
 #!/bin/python3
 
 from datetime import datetime
-
+import concurrent.futures
 import os
 import sqlite3
 import time
@@ -14,7 +14,7 @@ import json
 import requests
 
 import io
-from PIL import Image, ImageDraw, UnidentifiedImageError, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 import difflib
 
 mqtt_client = None
@@ -22,12 +22,17 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '2.0.0'
+executor = None
 
-CONFIG_PATH = '/config/config.yml'
-DB_PATH = '/config/frigate_plate_recogizer.db'
-LOG_FILE = '/config/frigate_plate_recogizer.log'
-SNAPSHOT_PATH = '/plates'
+VERSION = '2.1.0'
+
+# set local paths for development
+LOCAL = os.getenv('LOCAL', False)
+
+CONFIG_PATH = f'{'' if LOCAL else '/'}config/config.yml'
+DB_PATH = f'{'' if LOCAL else '/'}config/frigate_plate_recogizer.db'
+LOG_FILE = f'{'' if LOCAL else '/'}config/frigate_plate_recogizer.log'
+SNAPSHOT_PATH = f'{'' if LOCAL else '/'}plates'
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
@@ -36,13 +41,13 @@ DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
 CURRENT_EVENTS = {}
 
 
-def on_connect(mqtt_client, userdata, flags, rc):
+def on_connect(mqtt_client, userdata, flags, reason_code, properties):
     _LOGGER.info("MQTT Connected")
     mqtt_client.subscribe(config['frigate']['main_topic'] + "/events")
 
-def on_disconnect(mqtt_client, userdata, rc):
-    if rc != 0:
-        _LOGGER.warning("Unexpected disconnection, trying to reconnect")
+def on_disconnect(mqtt_client, userdata, flags, reason_code, properties):
+    if reason_code != 0:
+        _LOGGER.warning(f"Unexpected disconnection, trying to reconnect userdata:{userdata}, flags:{flags}, properties:{properties}")
         while True:
             try:
                 mqtt_client.reconnect()
@@ -424,6 +429,10 @@ def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, f
     conn.close()
 
 def on_message(client, userdata, message):
+    global executor
+    executor.submit(process_message, message)
+
+def process_message(message):
     if check_first_message():
         return
 
@@ -455,9 +464,11 @@ def on_message(client, userdata, message):
     
     if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
         CURRENT_EVENTS[frigate_event_id] =  0
-        
     
-    snapshot = get_snapshot(frigate_event_id, frigate_url, True)
+    # get snapshot if it exists
+    snapshot = None
+    if after_data['has_snapshot']:
+        snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
         if frigate_event_id in CURRENT_EVENTS:
             del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
@@ -520,14 +531,13 @@ def load_config():
 def run_mqtt_client():
     global mqtt_client
     _LOGGER.info(f"Starting MQTT client. Connecting to: {config['frigate']['mqtt_server']}")
-    now = datetime.now()
-    current_time = now.strftime("%Y%m%d%H%M%S")
 
     # setup mqtt client
-    mqtt_client = mqtt.Client("FrigatePlateRecognizer" + current_time)
-    mqtt_client.on_message = on_message
-    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    mqtt_client.enable_logger()
     mqtt_client.on_connect = on_connect
+    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client.on_message = on_message
 
     # check if we are using authentication and set username/password if so
     if config['frigate'].get('mqtt_username', False):
@@ -561,6 +571,8 @@ def load_logger():
     _LOGGER.addHandler(file_handler)
 
 def main():
+    global executor
+
     load_config()
     setup_db()
     load_logger()
@@ -577,6 +589,7 @@ def main():
         _LOGGER.info(f"Using CodeProject.AI API")
 
 
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
     run_mqtt_client()
 
 
