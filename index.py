@@ -24,7 +24,7 @@ _LOGGER = None
 
 executor = None
 
-VERSION = '2.1.0'
+VERSION = '2.1.1'
 
 # set local paths for development
 LOCAL = os.getenv('LOCAL', False)
