@@ -1,3 +1,5 @@
+// https://docs.frigate.video/integrations/api/#get-apievents
+
 const event = {
   "before": {
     "id": "1733152597.08157-flkir5",
