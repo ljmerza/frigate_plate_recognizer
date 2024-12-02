@@ -1,4 +1,4 @@
-{
+const event = {
   "before": {
     "id": "1733152597.08157-flkir5",
     "camera": "driveway_camera",
@@ -39,7 +39,7 @@
     "id": "1733152597.08157-flkir5",
     "camera": "driveway_camera",
     "frame_time": 1733152600.076167,
-    "snapshot": {
+    "snapshot": { // will this exist if has_snapshot is false?
       "frame_time": 1733152600.076167,
       "box": [
         542,
@@ -92,5 +92,5 @@
     "attributes": {},
     "current_attributes": []
   },
-  "type": "new"
+  "type": "new" // can be new. update, end
 }
