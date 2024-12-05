@@ -144,6 +144,25 @@ def plate_recognizer(image):
     else:
         return plate_number, score, None, None
 
+def fast_alpr(image):
+    plate_detector_model = config['fast_alpr'].get('plate_detector_model')
+    ocr_model = config['fast_alpr'].get('ocr_model')
+    alpr = ALPR(
+        detector_model=plate_detector_model,
+        ocr_model=ocr_model,ocr_device="cpu",ocr_model_path=CONFIG_PATH + "/models"
+    )
+
+    image1 = Image.open(io.BytesIO(image))
+    image_np = np.array(image1)
+
+    alpr_results = alpr.predict(image_np)
+
+    for result in alpr_results:
+        ocr_text = result.ocr.text
+        ocr_confidence = result.ocr.confidence
+
+    return ocr_text, ocr_confidence, None, None
+
 def check_watched_plates(plate_number, response):
     config_watched_plates = config['frigate'].get('watched_plates', [])
     if not config_watched_plates:
@@ -401,6 +420,8 @@ def get_plate(snapshot):
         plate_number, plate_score , watched_plate, fuzzy_score = plate_recognizer(snapshot)
     elif config.get('code_project'):
         plate_number, plate_score, watched_plate, fuzzy_score = code_project(snapshot)
+    elif config.get('fast_alpr'):
+        plate_number, plate_score, watched_plate, fuzzy_score = fast_alpr(snapshot)
     else:
         _LOGGER.error("Plate Recognizer is not configured")
         return None, None, None, None

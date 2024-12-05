@@ -75,6 +75,23 @@ code_project:
   api_url: http://127.0.0.1:32168/v1/image/alpr
 ```
 
+There is an additional option for plate recogniser, fast-aplr https://github.com/ankandrew/fast-alpr?tab=readme-ov-file#-quick-start
+This way , there is no additional external service required
+
+by default , it uses yolo-v9-t-384-license-plate-end2end model for plate recognition, then uses
+european-plates-mobile-vit-v2-model for plate OCR from https://github.com/ankandrew/fast-plate-ocr,
+there is a documented way to train your own model for your own plate data
+
+```yml
+#plate_recognizer:
+#  token: xxxxxxxxxx
+#  regions:
+#    - us-ca
+fast-alpr:
+  plate_detector_model: yolo-v9-t-384-license-plate-end2end
+  ocr_model: european-plates-mobile-vit-v2-model
+```
+
 ### Running
 
 ```bash
