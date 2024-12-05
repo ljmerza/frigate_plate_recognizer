@@ -2,3 +2,5 @@ paho_mqtt==2.1.0
 requests==2.32.3
 PyYAML==6.0.2
 Pillow==11.0.0
+fast_alpr
+numpy
