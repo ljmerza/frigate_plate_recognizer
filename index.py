@@ -24,7 +24,7 @@ _LOGGER = None
 
 executor = None
 
-VERSION = '2.1.1'
+VERSION = '2.2.0'
 
 # set local paths for development
 LOCAL = os.getenv('LOCAL', False)
@@ -111,38 +111,52 @@ def code_project(image):
     else:
         return plate_number, score, None, None
 
-def plate_recognizer(image):
+def plate_recognizer(image, retries=3, delay=1):
     api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
+    headers = {'Authorization': f'Token {token}'}
+    data = dict(regions=config['plate_recognizer']['regions'])
 
-    response = requests.post(
-        api_url,
-        data=dict(regions=config['plate_recognizer']['regions']),
-        files=dict(upload=image),
-        headers={'Authorization': f'Token {token}'}
-    )
+    for attempt in range(retries):
+        response = requests.post(
+            api_url,
+            data=data,
+            files=dict(upload=image),
+            headers=headers
+        )
+        
+        if response.status_code == 429:  # Too Many Requests
+            _LOGGER.warning(f"Rate limit hit. Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay *= 2  # Exponential backoff
+            continue
 
-    response = response.json()
-    _LOGGER.debug(f"response: {response}")
+        if response.status_code != 201:
+            _LOGGER.error(f"API error: {response.status_code}, {response.text}")
+            return None, None, None, None
 
-    if response.get('results') is None:
-        _LOGGER.error(f"Failed to get plate number. Response: {response}")
-        return None, None, None, None
+        response_json = response.json()
+        _LOGGER.debug(f"response: {response_json}")
 
-    if len(response['results']) == 0:
-        _LOGGER.debug(f"No plates found")
-        return None, None, None, None
+        if response_json.get('results') is None or len(response_json['results']) == 0:
+            _LOGGER.debug(f"No plates found or invalid response: {response_json}")
+            return None, None, None, None
 
-    plate_number = response['results'][0].get('plate')
-    score = response['results'][0].get('score')
-    
-    watched_plate, watched_score, fuzzy_score = check_watched_plates(plate_number, response['results'][0].get('candidates'))
-    if fuzzy_score:
-        return plate_number, score, watched_plate, fuzzy_score
-    elif watched_plate: 
-        return plate_number, watched_score, watched_plate, None
-    else:
-        return plate_number, score, None, None
+        plate_number = response_json['results'][0].get('plate')
+        score = response_json['results'][0].get('score')
+        watched_plate, watched_score, fuzzy_score = check_watched_plates(
+            plate_number, response_json['results'][0].get('candidates')
+        )
+        if fuzzy_score:
+            return plate_number, score, watched_plate, fuzzy_score
+        elif watched_plate: 
+            return plate_number, watched_score, watched_plate, None
+        else:
+            return plate_number, score, None, None
+
+    _LOGGER.error(f"Failed to get plate number after {retries} retries.")
+    return None, None, None, None
+
 
 def fast_alpr(image):
     plate_detector_model = config['fast_alpr'].get('plate_detector_model')
