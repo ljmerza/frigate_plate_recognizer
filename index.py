@@ -24,7 +24,7 @@ _LOGGER = None
 
 executor = None
 
-VERSION = '2.2.0'
+VERSION = '2.2.1'
 
 # set local paths for development
 LOCAL = os.getenv('LOCAL', False)
@@ -131,7 +131,7 @@ def plate_recognizer(image, retries=3, delay=1):
             delay *= 2  # Exponential backoff
             continue
 
-        if response.status_code != 201:
+        if response.status_code != 201 and response.status_code != 200:
             _LOGGER.error(f"API error: {response.status_code}, {response.text}")
             return None, None, None, None
 
