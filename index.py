@@ -6,7 +6,6 @@ import os
 import sqlite3
 import time
 import logging
-import signal
 
 import paho.mqtt.client as mqtt
 import yaml
