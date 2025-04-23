@@ -1,7 +1,7 @@
 #!/bin/python3
 
 from datetime import datetime
-
+import concurrent.futures
 import os
 import sqlite3
 import time
@@ -15,7 +15,7 @@ import json
 import requests
 
 import io
-from PIL import Image, ImageDraw, UnidentifiedImageError, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 import difflib
 import prometheus_client
 
@@ -24,12 +24,17 @@ config = None
 first_message = True
 _LOGGER = None
 
-VERSION = '1.8.14'
+executor = None
 
-CONFIG_PATH = '/config/config.yml'
-DB_PATH = '/config/frigate_plate_recogizer.db'
-LOG_FILE = '/config/frigate_plate_recogizer.log'
-SNAPSHOT_PATH = '/plates'
+VERSION = '2.2.1'
+
+# set local paths for development
+LOCAL = os.getenv('LOCAL', False)
+
+CONFIG_PATH = f"{'' if LOCAL else '/'}config/config.yml"
+DB_PATH = f"{'' if LOCAL else '/'}config/frigate_plate_recogizer.db"
+LOG_FILE = f"{'' if LOCAL else '/'}config/frigate_plate_recogizer.log"
+SNAPSHOT_PATH = f"{'' if LOCAL else '/'}plates"
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
@@ -47,15 +52,15 @@ code_project_counter = prometheus_client.Counter('code_project_calls', 'count of
 plate_recognizer_counter = prometheus_client.Counter('plate_recognizer_calls', 'count of sends')
 plate_recognizer_err = prometheus_client.Counter('plate_recognizer_errors', 'count of sends')
 
-def on_connect(mqtt_client, userdata, flags, rc):
+def on_connect(mqtt_client, userdata, flags, reason_code, properties):
     on_connect_counter.inc()
     _LOGGER.info("MQTT Connected")
     mqtt_client.subscribe(config['frigate']['main_topic'] + "/events")
 
-def on_disconnect(mqtt_client, userdata, rc):
+def on_disconnect(mqtt_client, userdata, flags, reason_code, properties):
     on_disconnect_counter.inc()
-    if rc != 0:
-        _LOGGER.warning("Unexpected disconnection, trying to reconnect")
+    if reason_code != 0:
+        _LOGGER.warning(f"Unexpected disconnection, trying to reconnect userdata:{userdata}, flags:{flags}, properties:{properties}")
         while True:
             try:
                 mqtt_client.reconnect()
@@ -120,40 +125,53 @@ def code_project(image):
     else:
         return plate_number, score, None, None
 
-def plate_recognizer(image):
+def plate_recognizer(image, retries=3, delay=1):
     plate_recognizer_counter.inc()
     api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
     token = config['plate_recognizer']['token']
+    headers = {'Authorization': f'Token {token}'}
+    data = dict(regions=config['plate_recognizer']['regions'])
 
-    response = requests.post(
-        api_url,
-        data=dict(regions=config['plate_recognizer']['regions']),
-        files=dict(upload=image),
-        headers={'Authorization': f'Token {token}'}
-    )
+    for attempt in range(retries):
+        response = requests.post(
+            api_url,
+            data=data,
+            files=dict(upload=image),
+            headers=headers
+        )
+        
+        if response.status_code == 429:  # Too Many Requests
+            _LOGGER.warning(f"Rate limit hit. Retrying in {delay} seconds...")
+            time.sleep(delay)
+            delay *= 2  # Exponential backoff
+            continue
 
-    response = response.json()
-    _LOGGER.debug(f"response: {response}")
+        if response.status_code != 201 and response.status_code != 200:
+            _LOGGER.error(f"API error: {response.status_code}, {response.text}")
+            return None, None, None, None
 
-    if response.get('results') is None:
-        plate_recognizer_errors.inc()
-        _LOGGER.error(f"Failed to get plate number. Response: {response}")
-        return None, None, None, None
+        response_json = response.json()
+        _LOGGER.debug(f"response: {response_json}")
 
-    if len(response['results']) == 0:
-        _LOGGER.debug(f"No plates found")
-        return None, None, None, None
+        if response_json.get('results') is None or len(response_json['results']) == 0:
+            _LOGGER.debug(f"No plates found or invalid response: {response_json}")
+            return None, None, None, None
 
-    plate_number = response['results'][0].get('plate')
-    score = response['results'][0].get('score')
+        plate_number = response_json['results'][0].get('plate')
+        score = response_json['results'][0].get('score')
+        watched_plate, watched_score, fuzzy_score = check_watched_plates(
+            plate_number, response_json['results'][0].get('candidates')
+        )
+        if fuzzy_score:
+            return plate_number, score, watched_plate, fuzzy_score
+        elif watched_plate: 
+            return plate_number, watched_score, watched_plate, None
+        else:
+            return plate_number, score, None, None
 
-    watched_plate, watched_score, fuzzy_score = check_watched_plates(plate_number, response['results'][0].get('candidates'))
-    if fuzzy_score:
-        return plate_number, score, watched_plate, fuzzy_score
-    elif watched_plate:
-        return plate_number, watched_score, watched_plate, None
-    else:
-        return plate_number, score, None, None
+    _LOGGER.error(f"Failed to get plate number after {retries} retries.")
+    return None, None, None, None
+
 
 def check_watched_plates(plate_number, response):
     config_watched_plates = config['frigate'].get('watched_plates', [])
@@ -166,6 +184,7 @@ def check_watched_plates(plate_number, response):
     #Step 1 - test if top plate is a watched plate
     matching_plate = str(plate_number).lower() in config_watched_plates
     if matching_plate:
+        plate_recognizer_errors.inc()
         _LOGGER.info(f"Recognised plate is a Watched Plate: {plate_number}")
         return None, None, None
 
@@ -340,7 +359,8 @@ def get_snapshot(frigate_event_id, frigate_url, cropped):
     _LOGGER.debug(f"event URL: {snapshot_url}")
 
     # get snapshot
-    response = requests.get(snapshot_url, params={ "crop": cropped, "quality": 95 })
+    parameters = {"crop": 1 if cropped else 0, "quality": 95}
+    response = requests.get(snapshot_url, params=parameters)
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
@@ -442,6 +462,10 @@ def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, f
     conn.close()
 
 def on_message(client, userdata, message):
+    global executor
+    executor.submit(process_message, message)
+
+def process_message(message):
     if check_first_message():
         return
 
@@ -473,10 +497,13 @@ def on_message(client, userdata, message):
 
     if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
         CURRENT_EVENTS[frigate_event_id] =  0
-
-
-    snapshot = get_snapshot(frigate_event_id, frigate_url, True)
+    
+    # get snapshot if it exists
+    snapshot = None
+    if after_data['has_snapshot']:
+        snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
+        _LOGGER.debug(f"Event {frigate_event_id} has no snapshot")
         if frigate_event_id in CURRENT_EVENTS:
             del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
         return
@@ -538,15 +565,13 @@ def load_config():
 def run_mqtt_client():
     global mqtt_client
     _LOGGER.info(f"Starting MQTT client. Connecting to: {config['frigate']['mqtt_server']}")
-    now = datetime.now()
-    current_time = now.strftime("%Y%m%d%H%M%S")
-    _LOGGER.info(dir(mqtt_client))
 
     # setup mqtt client
-    mqtt_client = mqtt.Client("FrigatePlateRecognizer" + current_time)
-    mqtt_client.on_message = on_message
-    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+    mqtt_client.enable_logger()
     mqtt_client.on_connect = on_connect
+    mqtt_client.on_disconnect = on_disconnect
+    mqtt_client.on_message = on_message
 
     # check if we are using authentication and set username/password if so
     if config['frigate'].get('mqtt_username', False):
@@ -580,6 +605,8 @@ def load_logger():
     _LOGGER.addHandler(file_handler)
 
 def main():
+    global executor
+
     load_config()
     setup_db()
     load_logger()
@@ -599,6 +626,7 @@ def main():
         _LOGGER.info(f"Using CodeProject.AI API")
 
 
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
     run_mqtt_client()
 
 

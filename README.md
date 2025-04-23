@@ -4,12 +4,14 @@ Identify license plates via [Plate Recognizer](https://guides.platerecognizer.co
 
 ### Setup
 
-Create a `config.yml` file in your docker volume with the following contents:
+Create a `config.yml` file for the frigate_plate_recognizer docker container, in your docker volume. When running the docker container it will access this file as /config/config.yml.
+
+Here is an example of the contents to use:
 
 ```yml
 frigate:
   frigate_url: http://127.0.0.1:5000
-  mqtt_server: 127.0.0.1
+  mqtt_server: 127.0.0.1 # IP of MQTT server used by Frigate and Home Assistant
   mqtt_port: 1883 # Optional. Default shown.
   mqtt_username: username
   mqtt_password: password
@@ -21,6 +23,11 @@ frigate:
   objects:
     - car
   min_score: .8
+  #save_snapshots: True # Saves a snapshot called [Camera Name]_[timestamp].png
+  #draw_box: True # Optional - Draws a box around the plate on the snapshot along with the license plate text (Required Frigate plus setting)
+  #always_save_snapshot: True # Optional - will save a snapshot of every event sent to frigate_plate_recognizer, even if no plate is detected
+  #watched_plates: #list of plates to watch.
+  #  -  ABC123
 plate_recognizer:
   token: xxxxxxxxxx
   regions:
@@ -28,18 +35,24 @@ plate_recognizer:
 logger_level: INFO
 ```
 
-Update your frigate url, mqtt server settings. If you are using mqtt authentication, update the username and password. Update the camera name(s) to match the camera name in your frigate config. Add your Plate Recognizer API key and region(s).
-
-You'll need to make an account (free) [here](https://app.platerecognizer.com/accounts) and get an API key. You get up to 2,500 lookups per month for free. You will also need to enable car object detection for the cameras you want to use this with. See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
-
-You can specify a custom url for the plate_recognizer api by adding `api_url` to your config:
+Update your frigate url, mqtt server settings. Specify the MQTT server being used by Frigate and Home Assistant
+If you are using mqtt authentication, update the username and password. 
 
 ```yml
-plate_recognizer:
-  api_url: http://HOST-IP:8080/v1/plate-reader
-  token: xxxxxxxxxx
-  regions:
-    - us-ca
+  frigate_url: http://127.0.0.1:5000
+  mqtt_server: 127.0.0.1
+  mqtt_port: 1883 # Optional. Default shown.
+  mqtt_username: username
+  mqtt_password: password
+  main_topic: frigate
+  return_topic: plate_recognizer
+```
+
+Update the camera name(s) to match the camera name in your frigate config. 
+
+```yml
+  camera:
+    - driveway_camera  
 ```
 
 You can also filter by zones and/or cameras. If you want to filter by zones, add `zones` to your config:
@@ -52,7 +65,25 @@ frigate:
     - back_door
 ```
 
-If no objects are speficied in the Frigate options, it will default to `[motorcycle, car, bus]`.
+If no objects are specified in the Frigate options, it will default to `[motorcycle, car, bus]`.
+
+```yml
+  objects:
+    - car
+```
+
+You'll need to make an account (free) [here](https://app.platerecognizer.com/accounts) and get an API key. You get up to 2,500 lookups per month for free. You will also need to enable car object detection for the cameras you want to use this with. See [here](https://guides.platerecognizer.com/docs/snapshot/getting-started/) on how to locally host Plate Recognizer.
+Add your Plate Recognizer API key and region(s).
+
+You can specify a custom url for the plate_recognizer api by adding `api_url` to your config:
+
+```yml
+plate_recognizer:
+  api_url: http://HOST-IP:8080/v1/plate-reader
+  token: xxxxxxxxxx
+  regions:
+    - us-ca
+```
 
 If you have a custom model with Frigate+ then it's able to detect license plates via an event's attributes, you can set `frigate_plus` to `true` in your config to activate this feature:
 
@@ -74,38 +105,6 @@ If you're using CodeProject.AI, you'll need to comment out plate_recognizer in y
 code_project:
   api_url: http://127.0.0.1:32168/v1/image/alpr
 ```
-
-### Running
-
-```bash
-docker run -v /path/to/config:/config -e TZ=America/New_York -it --rm --name frigate_plate_recognizer lmerza/frigate_plate_recognizer:latest
-```
-
-or using docker-compose:
-
-```yml
-services:
-  frigate_plate_recognizer:
-    image: lmerza/frigate_plate_recognizer:latest
-    container_name: frigate_plate_recognizer
-    volumes:
-      - /path/to/config:/config
-    restart: unless-stopped
-    environment:
-      - TZ=America/New_York
-```
-
-https://hub.docker.com/r/lmerza/frigate_plate_recognizer
-
-### Debugging
-
-set `logger_level` in your config to `DEBUG` to see more logging information:
-
-```yml
-logger_level: DEBUG
-```
-
-Logs will be in `/config/frigate_plate_recognizer.log`
 
 ### Save Snapshot Images to Path
 
@@ -148,3 +147,53 @@ frigate:
 If a watched plate is found in the list of candidates plates returned by plate-recognizer / CP.AI, the response will be updated to use that plate and it's score. The original plate will be added to the MQTT response as an additional `original_plate` field.
 
 If no candidates match and fuzzy_match is enabled with a value, the recognized plate is compared against each of the watched_plates using fuzzy matching. If a plate is found with a score > fuzzy_match, the response will be updated with that plate. The original plate and the associated fuzzy_score will be added to the MQTT response as additional fields `original_plate` and `fuzzy_score`.
+
+
+### Running
+
+```bash
+docker run -v /path/to/config:/config -e TZ=America/New_York -it --rm --name frigate_plate_recognizer lmerza/frigate_plate_recognizer:latest
+```
+
+or using docker-compose:
+
+```yml
+services:
+  frigate_plate_recognizer:
+    image: lmerza/frigate_plate_recognizer:latest
+    container_name: frigate_plate_recognizer
+    volumes:
+      - /path/to/config:/config
+      #- /path/to/plates:/plates:rw
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+```
+
+https://hub.docker.com/r/lmerza/frigate_plate_recognizer
+
+### Debugging
+
+set `logger_level` in your config to `DEBUG` to see more logging information:
+
+```yml
+logger_level: DEBUG
+```
+
+Logs will be in `/config/frigate_plate_recognizer.log`
+
+
+### Add License Plate MQTT based sensor to Home Assistant
+
+Add the following to your Home Assistant configuration.yaml file. This will provide a sensor with the value of the most recent number plate recognized.
+
+```yaml
+mqtt:
+ sensor:
+  - name: "License plate"
+    state_topic: "frigate/plate_recognizer"
+    value_template: "{{ value_json.plate_number }}"
+    #unit_of_measurement: "na"
+    json_attributes_topic: "frigate/plate_recognizer"
+    icon: mdi:car
+```
