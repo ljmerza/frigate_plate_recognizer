@@ -259,7 +259,7 @@ def send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, f
     return_topic = config['frigate']['return_topic']
     topic = f'{main_topic}/{return_topic}'
 
-    mqtt_client.publish(topic, json.dumps(message))
+    mqtt_client.publish(topic, json.dumps(message), retain=True)
 
 def has_common_value(array1, array2):
     return any(value in array2 for value in array1)
