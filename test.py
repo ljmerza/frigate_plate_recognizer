@@ -275,6 +275,7 @@ class TestIsDuplicateEvent(BaseTestCase):
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_connect.return_value = mock_conn
+        mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         # Setting up the cursor to return a non-empty row, indicating a duplicate event
@@ -286,7 +287,7 @@ class TestIsDuplicateEvent(BaseTestCase):
         # Assert the function returns True for a duplicate event
         self.assertTrue(result)
         mock_cursor.execute.assert_called_with(
-            "SELECT * FROM plates WHERE frigate_event = ?",
+            "SELECT 1 FROM plates WHERE frigate_event = ?",
             (frigate_event_id,)
         )
         self.mock_logger.debug.assert_called_with(f"Skipping event: {frigate_event_id} because it has already been processed")
@@ -297,6 +298,7 @@ class TestIsDuplicateEvent(BaseTestCase):
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
         mock_connect.return_value = mock_conn
+        mock_conn.__enter__.return_value = mock_conn
         mock_conn.cursor.return_value = mock_cursor
 
         # Setting up the cursor to return None, indicating the event is not a duplicate
@@ -308,7 +310,7 @@ class TestIsDuplicateEvent(BaseTestCase):
         # Assert the function returns False for a non-duplicate event
         self.assertFalse(result)
         mock_cursor.execute.assert_called_with(
-            "SELECT * FROM plates WHERE frigate_event = ?",
+            "SELECT 1 FROM plates WHERE frigate_event = ?",
             (frigate_event_id,)
         )
         self.mock_logger.debug.assert_not_called()
@@ -547,9 +549,8 @@ class TestStorePlateInDb(BaseTestCase):
     def test_store_plate_in_db(self, mock_connect):
         # Mocking the database connection and cursor
         mock_conn = MagicMock()
-        mock_cursor = MagicMock()
         mock_connect.return_value = mock_conn
-        mock_conn.cursor.return_value = mock_cursor
+        mock_conn.__enter__.return_value = mock_conn
 
         plate_number = 'ABC123'
         plate_score = 0.95
@@ -557,17 +558,17 @@ class TestStorePlateInDb(BaseTestCase):
         after_data = {'camera': 'camera1'}
         formatted_start_time = '2021-01-01 12:00:00'
 
-        index.store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
+        result = index.store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
 
-        # Assert that the correct SQL command is executed
-        mock_cursor.execute.assert_called_with(
-            """INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)""",
+        self.assertTrue(result)
+
+        mock_conn.execute.assert_any_call(f"PRAGMA busy_timeout = {index.DB_BUSY_TIMEOUT_MS}")
+        mock_conn.execute.assert_any_call("PRAGMA foreign_keys=ON")
+        mock_conn.execute.assert_any_call(
+            """INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name)
+                VALUES (?, ?, ?, ?, ?)""",
             (formatted_start_time, plate_score, plate_number, frigate_event_id, after_data['camera'])
         )
-
-        # Assert database commit and connection close
-        mock_conn.commit.assert_called_once()
-        mock_conn.close.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

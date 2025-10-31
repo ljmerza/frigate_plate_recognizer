@@ -9,6 +9,7 @@ import sqlite3
 import time
 import logging
 from typing import Any, Dict, Optional
+import threading
 
 import paho.mqtt.client as mqtt
 import sys
@@ -57,7 +58,10 @@ DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
 CURRENT_EVENTS = {}
+CURRENT_EVENTS_LOCK = threading.Lock()
 PORT = DEFAULT_METRICS_PORT
+DB_TIMEOUT_SECONDS = 30
+DB_BUSY_TIMEOUT_MS = 5000
 
 on_connect_counter = prometheus_client.Counter('on_connect', 'count of connects')
 on_disconnect_counter = prometheus_client.Counter('on_disconnect', 'count of connects')
@@ -66,6 +70,30 @@ mqtt_sends_counter = prometheus_client.Counter('mqtt_sends', 'count of sends', [
 code_project_counter = prometheus_client.Counter('code_project_calls', 'count of sends')
 plate_recognizer_counter = prometheus_client.Counter('plate_recognizer_calls', 'count of sends')
 plate_recognizer_err = prometheus_client.Counter('plate_recognizer_errors', 'count of sends')
+http_request_latency_histogram = prometheus_client.Histogram(
+    'http_request_duration_seconds',
+    'HTTP request duration',
+    ['service', 'operation'],
+)
+current_events_gauge = prometheus_client.Gauge(
+    'current_events_tracked',
+    'Number of events currently tracked',
+)
+processed_events_counter = prometheus_client.Counter(
+    'processed_events_total',
+    'Number of events processed categorised by result',
+    ['result'],
+)
+db_writes_counter = prometheus_client.Counter(
+    'db_writes_total',
+    'Database write operations',
+    ['status'],
+)
+db_errors_counter = prometheus_client.Counter(
+    'db_errors_total',
+    'Database errors',
+    ['operation'],
+)
 
 
 def _require_session(session: Optional[Session], label: str) -> Session:
@@ -116,6 +144,36 @@ def initialize_http_clients() -> None:
     else:
         CODE_PROJECT_SESSION = None
 
+
+def _track_event_start(event_id: str) -> None:
+    with CURRENT_EVENTS_LOCK:
+        CURRENT_EVENTS.setdefault(event_id, 0)
+        current_events_gauge.set(len(CURRENT_EVENTS))
+
+
+def _is_event_tracked(event_id: str) -> bool:
+    with CURRENT_EVENTS_LOCK:
+        return event_id in CURRENT_EVENTS
+
+
+def _increment_event_attempt(event_id: str) -> int:
+    with CURRENT_EVENTS_LOCK:
+        CURRENT_EVENTS[event_id] = CURRENT_EVENTS.get(event_id, 0) + 1
+        current_events_gauge.set(len(CURRENT_EVENTS))
+        return CURRENT_EVENTS[event_id]
+
+
+def _get_event_attempts(event_id: str) -> int:
+    with CURRENT_EVENTS_LOCK:
+        return CURRENT_EVENTS.get(event_id, 0)
+
+
+def _clear_event(event_id: str) -> None:
+    with CURRENT_EVENTS_LOCK:
+        if event_id in CURRENT_EVENTS:
+            del CURRENT_EVENTS[event_id]
+            current_events_gauge.set(len(CURRENT_EVENTS))
+
 def on_connect(mqtt_client, userdata, flags, reason_code, properties):
     on_connect_counter.inc()
     _LOGGER.info("MQTT Connected")
@@ -150,11 +208,16 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
     payload = { "subLabel": sublabel }
     headers = { "Content-Type": "application/json" }
     session = get_frigate_session()
+    start_time = time.perf_counter()
     try:
         response = session.post(post_url, data=json.dumps(payload), headers=headers)
     except RequestException as exc:
         _LOGGER.error(f"Failed to set sublabel due to HTTP error: {exc}")
         return
+    finally:
+        http_request_latency_histogram.labels('frigate', 'set_sublabel').observe(
+            time.perf_counter() - start_time
+        )
 
     percent_score = "{:.1%}".format(score)
 
@@ -173,12 +236,17 @@ def code_project(image):
     api_url = config['code_project'].get('api_url')
     session = get_code_project_session()
 
+    start_time = time.perf_counter()
     try:
         http_response = session.post(api_url, files=dict(upload=image))
         http_response.raise_for_status()
     except RequestException as exc:
         _LOGGER.error(f"CodeProject.AI request failed: {exc}")
         return None, None, None, None
+    finally:
+        http_request_latency_histogram.labels('code_project', 'recognize').observe(
+            time.perf_counter() - start_time
+        )
 
     try:
         response = http_response.json()
@@ -222,6 +290,7 @@ def plate_recognizer(image):
     delay_seconds = 1
 
     for attempt in range(1, attempts + 1):
+        start_time = time.perf_counter()
         try:
             response = session.post(
                 api_url,
@@ -242,6 +311,10 @@ def plate_recognizer(image):
             time.sleep(delay_seconds)
             delay_seconds = min(delay_seconds * 2, 60)
             continue
+        finally:
+            http_request_latency_histogram.labels('plate_recognizer', 'recognize').observe(
+                time.perf_counter() - start_time
+            )
 
         if response.status_code == 429:
             _LOGGER.warning(
@@ -474,7 +547,7 @@ def check_invalid_event(before_data, after_data):
         return True
 
     # limit api calls to plate checker api by only checking the best score for an event
-    if(before_data['top_score'] == after_data['top_score'] and after_data['id'] in CURRENT_EVENTS) and not config['frigate'].get('frigate_plus', False):
+    if(before_data['top_score'] == after_data['top_score'] and _is_event_tracked(after_data['id'])) and not config['frigate'].get('frigate_plus', False):
         _LOGGER.debug(f"duplicated snapshot from Frigate as top_score from before and after are the same: {after_data['top_score']} {after_data['id']}")
         return True
     return False
@@ -487,11 +560,16 @@ def get_snapshot(frigate_event_id, frigate_url, cropped):
     # get snapshot
     parameters = {"crop": 1 if cropped else 0, "quality": 95}
     session = get_frigate_session()
+    start_time = time.perf_counter()
     try:
         response = session.get(snapshot_url, params=parameters)
     except RequestException as exc:
         _LOGGER.error(f"Error getting snapshot: {exc}")
         return
+    finally:
+        http_request_latency_histogram.labels('frigate', 'snapshot').observe(
+            time.perf_counter() - start_time
+        )
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
@@ -511,11 +589,16 @@ def get_license_plate_attribute(after_data):
 def get_final_data(event_url):
     if config['frigate'].get('frigate_plus', False):
         session = get_frigate_session()
+        start_time = time.perf_counter()
         try:
             response = session.get(event_url)
         except RequestException as exc:
             _LOGGER.error(f"Error getting final data: {exc}")
             return
+        finally:
+            http_request_latency_histogram.labels('frigate', 'event_data').observe(
+                time.perf_counter() - start_time
+            )
         if response.status_code != 200:
             _LOGGER.error(f"Error getting final data: {response.status_code}")
             return
@@ -553,11 +636,11 @@ def is_valid_license_plate(after_data):
 
 def is_duplicate_event(frigate_event_id):
      # see if we have already processed this event
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""SELECT * FROM plates WHERE frigate_event = ?""", (frigate_event_id,))
-    row = cursor.fetchone()
-    conn.close()
+    with sqlite3.connect(DB_PATH, timeout=DB_TIMEOUT_SECONDS) as conn:
+        conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+        cursor = conn.cursor()
+        cursor.execute("""SELECT 1 FROM plates WHERE frigate_event = ?""", (frigate_event_id,))
+        row = cursor.fetchone()
 
     if row is not None:
         _LOGGER.debug(f"Skipping event: {frigate_event_id} because it has already been processed")
@@ -588,110 +671,157 @@ def get_plate(snapshot):
 
     return plate_number, plate_score, watched_plate, fuzzy_score
 
-def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
+def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time) -> bool:
     _LOGGER.info(f"Storing plate number in database: {plate_number} with score: {plate_score}")
 
-    cursor.execute("""INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name) VALUES (?, ?, ?, ?, ?)""",
-        (formatted_start_time, plate_score, plate_number, frigate_event_id, after_data['camera'])
-    )
-
-    conn.commit()
-    conn.close()
+    try:
+        with sqlite3.connect(DB_PATH, timeout=DB_TIMEOUT_SECONDS) as conn:
+            conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+            conn.execute("PRAGMA foreign_keys=ON")
+            conn.execute(
+                """INSERT INTO plates (detection_time, score, plate_number, frigate_event, camera_name)
+                VALUES (?, ?, ?, ?, ?)""",
+                (formatted_start_time, plate_score, plate_number, frigate_event_id, after_data['camera'])
+            )
+        db_writes_counter.labels(status='success').inc()
+        return True
+    except sqlite3.IntegrityError as exc:
+        db_errors_counter.labels(operation='insert').inc()
+        _LOGGER.debug(f"Plate for event {frigate_event_id} already stored: {exc}")
+        return False
+    except sqlite3.Error as exc:
+        db_errors_counter.labels(operation='insert').inc()
+        _LOGGER.error(f"SQLite error storing plate {frigate_event_id}: {exc}")
+        raise
 
 def on_message(client, userdata, message):
     global executor
     executor.submit(process_message, message)
 
 def process_message(message):
-    if check_first_message():
-        return
+    result = 'error'
+    try:
+        result = _process_message_inner(message)
+    except Exception:
+        _LOGGER.exception("Unhandled error while processing MQTT message")
+    finally:
+        processed_events_counter.labels(result=result).inc()
 
-    # get frigate event payload
+
+def _process_message_inner(message) -> str:
+    if check_first_message():
+        return 'first_message'
+
     payload_dict = json.loads(message.payload)
     _LOGGER.debug(f'mqtt message: {payload_dict}')
 
     before_data = payload_dict.get('before', {})
     after_data = payload_dict.get('after', {})
-    type = payload_dict.get('type','')
+    message_type = payload_dict.get('type', '')
 
     frigate_url = config['frigate']['frigate_url']
     frigate_event_id = after_data['id']
 
-    if type == 'end' and after_data['id'] in CURRENT_EVENTS:
-        _LOGGER.debug(f"CLEARING EVENT: {frigate_event_id} after {CURRENT_EVENTS[frigate_event_id]} calls to AI engine")
-        if frigate_event_id in CURRENT_EVENTS:
-            del CURRENT_EVENTS[frigate_event_id]
+    if message_type == 'end' and _is_event_tracked(frigate_event_id):
+        _LOGGER.debug(
+            f"CLEARING EVENT: {frigate_event_id} after {_get_event_attempts(frigate_event_id)} calls to AI engine"
+        )
+        _clear_event(frigate_event_id)
 
     if check_invalid_event(before_data, after_data):
-        return
+        return 'invalid_event'
 
     if is_duplicate_event(frigate_event_id):
-        return
+        return 'duplicate_event'
 
     frigate_plus = config['frigate'].get('frigate_plus', False)
     if frigate_plus and not is_valid_license_plate(after_data):
-        return
+        return 'invalid_license_plate'
 
-    if not type == 'end' and not after_data['id'] in CURRENT_EVENTS:
-        CURRENT_EVENTS[frigate_event_id] =  0
-    
-    # get snapshot if it exists
+    if message_type != 'end' and not _is_event_tracked(frigate_event_id):
+        _track_event_start(frigate_event_id)
+
     snapshot = None
-    if after_data['has_snapshot']:
+    if after_data.get('has_snapshot'):
         snapshot = get_snapshot(frigate_event_id, frigate_url, True)
     if not snapshot:
         _LOGGER.debug(f"Event {frigate_event_id} has no snapshot")
-        if frigate_event_id in CURRENT_EVENTS:
-            del CURRENT_EVENTS[frigate_event_id] # remove existing id from current events due to snapshot failure - will try again next frame
-        return
+        _clear_event(frigate_event_id)
+        return 'no_snapshot'
 
     _LOGGER.debug(f"Getting plate for event: {frigate_event_id}")
-    if frigate_event_id in CURRENT_EVENTS:
-        if config['frigate'].get('max_attempts', 0) > 0 and CURRENT_EVENTS[frigate_event_id] > config['frigate'].get('max_attempts', 0):
-            _LOGGER.debug(f"Maximum number of AI attempts reached for event {frigate_event_id}: {CURRENT_EVENTS[frigate_event_id]}")
-            return
-        CURRENT_EVENTS[frigate_event_id] += 1
+
+    max_attempts = config['frigate'].get('max_attempts', 0)
+    if max_attempts > 0 and _get_event_attempts(frigate_event_id) >= max_attempts:
+        _LOGGER.debug(
+            f"Maximum number of AI attempts reached for event {frigate_event_id}: {_get_event_attempts(frigate_event_id)}"
+        )
+        return 'max_attempts'
+
+    attempt_count = _increment_event_attempt(frigate_event_id)
+    _LOGGER.debug(f"Attempt {attempt_count} for event {frigate_event_id}")
 
     plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot)
+    result = 'no_plate'
+    saved_plate_number = watched_plate if watched_plate else plate_number
+
     if plate_number:
         start_time = datetime.fromtimestamp(after_data['start_time'])
         formatted_start_time = start_time.strftime("%Y-%m-%d %H:%M:%S")
 
-        if watched_plate:
-            store_plate_in_db(watched_plate, plate_score, frigate_event_id, after_data, formatted_start_time)
-        else:
-            store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time)
-        set_sublabel(frigate_url, frigate_event_id, watched_plate if watched_plate else plate_number, plate_score)
+        try:
+            stored = store_plate_in_db(
+                saved_plate_number,
+                plate_score,
+                frigate_event_id,
+                after_data,
+                formatted_start_time,
+            )
+            result = 'success' if stored else 'duplicate_event'
+        except sqlite3.Error:
+            result = 'db_error'
 
-        send_mqtt_message(plate_number, plate_score, frigate_event_id, after_data, formatted_start_time, watched_plate, fuzzy_score)
+        set_sublabel(frigate_url, frigate_event_id, saved_plate_number, plate_score)
 
-    if plate_number or config['frigate'].get('always_save_snapshot', False):
+        send_mqtt_message(
+            plate_number,
+            plate_score,
+            frigate_event_id,
+            after_data,
+            formatted_start_time,
+            watched_plate,
+            fuzzy_score,
+        )
+
+    if saved_plate_number or config['frigate'].get('always_save_snapshot', False):
         save_image(
             config=config,
             after_data=after_data,
             frigate_url=frigate_url,
             frigate_event_id=frigate_event_id,
-            plate_number=watched_plate if watched_plate else plate_number
+            plate_number=saved_plate_number
         )
 
+    return result
+
 def setup_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS plates (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            detection_time TIMESTAMP NOT NULL,
-            score TEXT NOT NULL,
-            plate_number TEXT NOT NULL,
-            frigate_event TEXT NOT NULL UNIQUE,
-            camera_name TEXT NOT NULL
+    with sqlite3.connect(DB_PATH, timeout=DB_TIMEOUT_SECONDS) as conn:
+        conn.execute(f"PRAGMA busy_timeout = {DB_BUSY_TIMEOUT_MS}")
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS plates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                detection_time TIMESTAMP NOT NULL,
+                score TEXT NOT NULL,
+                plate_number TEXT NOT NULL,
+                frigate_event TEXT NOT NULL UNIQUE,
+                camera_name TEXT NOT NULL
+            )
+            """
         )
-    """)
-    conn.commit()
-    conn.close()
 
 def load_config():
     global config, APP_CONFIG, DB_PATH, LOG_FILE, SNAPSHOT_PATH, PORT
@@ -769,6 +899,7 @@ def main():
 
     _LOGGER.info("starting prom http server")
     prometheus_client.start_http_server(PORT)
+    _LOGGER.info(f"Prometheus metrics listening on port {PORT}")
 
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     _LOGGER.info(f"Time: {current_time}")
@@ -784,7 +915,10 @@ def main():
 
     max_workers = config.get('max_workers', 10)
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
-    run_mqtt_client()
+    try:
+        run_mqtt_client()
+    finally:
+        executor.shutdown(wait=True)
 
 
 if __name__ == '__main__':
