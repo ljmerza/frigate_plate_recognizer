@@ -27,6 +27,9 @@ ENV_FIELD_MAP: Dict[str, Sequence[str]] = {
     "FRP_MAIN_TOPIC": ("frigate", "main_topic"),
     "FRP_RETURN_TOPIC": ("frigate", "return_topic"),
     "FRP_FRIGATE_PLUS": ("frigate", "frigate_plus"),
+    "FRP_FRIGATE_TIMEOUT": ("frigate", "request_timeout"),
+    "FRP_FRIGATE_VERIFY_SSL": ("frigate", "verify_ssl"),
+    "FRP_FRIGATE_RETRIES": ("frigate", "api_retries"),
     "FRP_MIN_SCORE": ("frigate", "min_score"),
     "FRP_LICENSE_PLATE_MIN_SCORE": ("frigate", "license_plate_min_score"),
     "FRP_FUZZY_MATCH": ("frigate", "fuzzy_match"),
@@ -36,7 +39,13 @@ ENV_FIELD_MAP: Dict[str, Sequence[str]] = {
     "FRP_MAX_WORKERS": ("max_workers",),
     "FRP_PLATE_RECOGNIZER_TOKEN": ("plate_recognizer", "token"),
     "FRP_PLATE_RECOGNIZER_API_URL": ("plate_recognizer", "api_url"),
+    "FRP_PLATE_RECOGNIZER_TIMEOUT": ("plate_recognizer", "request_timeout"),
+    "FRP_PLATE_RECOGNIZER_RETRIES": ("plate_recognizer", "max_retries"),
+    "FRP_PLATE_RECOGNIZER_VERIFY_SSL": ("plate_recognizer", "verify_ssl"),
     "FRP_CODE_PROJECT_API_URL": ("code_project", "api_url"),
+    "FRP_CODE_PROJECT_TIMEOUT": ("code_project", "request_timeout"),
+    "FRP_CODE_PROJECT_RETRIES": ("code_project", "max_retries"),
+    "FRP_CODE_PROJECT_VERIFY_SSL": ("code_project", "verify_ssl"),
 }
 
 LIST_FIELDS = {
@@ -67,6 +76,9 @@ class FrigateConfig(BaseModel):
     main_topic: str = "frigate"
     return_topic: Optional[str] = "plate_recognizer"
     frigate_plus: bool = False
+    request_timeout: float = Field(default=10.0, gt=0.0)
+    verify_ssl: bool = True
+    api_retries: int = Field(default=3, ge=0)
     license_plate_min_score: float = Field(default=0.0, ge=0.0, le=1.0)
     camera: list[str] = Field(default_factory=list)
     zones: list[str] = Field(default_factory=list)
@@ -97,6 +109,9 @@ class PlateRecognizerConfig(BaseModel):
     token: str
     regions: list[str]
     api_url: Optional[str] = None
+    request_timeout: float = Field(default=10.0, gt=0.0)
+    max_retries: int = Field(default=3, ge=0)
+    verify_ssl: bool = True
 
     @field_validator("regions", mode="before")
     @classmethod
@@ -114,6 +129,9 @@ class CodeProjectConfig(BaseModel):
     """Configuration for CodeProject.AI API."""
 
     api_url: str
+    request_timeout: float = Field(default=10.0, gt=0.0)
+    max_retries: int = Field(default=3, ge=0)
+    verify_ssl: bool = True
 
 
 class PathsConfig(BaseModel):

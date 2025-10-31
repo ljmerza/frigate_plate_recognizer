@@ -8,11 +8,14 @@ import os
 import sqlite3
 import time
 import logging
+from typing import Any, Dict, Optional
 
 import paho.mqtt.client as mqtt
 import sys
 import json
 import requests
+from requests import Session
+from requests.exceptions import RequestException
 
 import io
 from PIL import Image, ImageDraw, ImageFont
@@ -28,6 +31,7 @@ from frigate_plate_recognizer.config import (
     DEFAULT_SNAPSHOT_DIR,
     load_app_config,
 )
+from frigate_plate_recognizer.http_client import build_session
 
 mqtt_client = None
 config = None
@@ -37,6 +41,10 @@ _LOGGER = None
 executor = None
 
 APP_CONFIG: AppConfig | None = None
+
+FRIGATE_SESSION: Optional[Session] = None
+PLATE_RECOGNIZER_SESSION: Optional[Session] = None
+CODE_PROJECT_SESSION: Optional[Session] = None
 
 VERSION = PACKAGE_VERSION
 
@@ -58,6 +66,55 @@ mqtt_sends_counter = prometheus_client.Counter('mqtt_sends', 'count of sends', [
 code_project_counter = prometheus_client.Counter('code_project_calls', 'count of sends')
 plate_recognizer_counter = prometheus_client.Counter('plate_recognizer_calls', 'count of sends')
 plate_recognizer_err = prometheus_client.Counter('plate_recognizer_errors', 'count of sends')
+
+
+def _require_session(session: Optional[Session], label: str) -> Session:
+    if session is None:
+        raise RuntimeError(f"{label} HTTP session is not initialised")
+    return session
+
+
+def get_frigate_session() -> Session:
+    return _require_session(FRIGATE_SESSION, "Frigate")
+
+
+def get_plate_recognizer_session() -> Session:
+    return _require_session(PLATE_RECOGNIZER_SESSION, "Plate Recognizer")
+
+
+def get_code_project_session() -> Session:
+    return _require_session(CODE_PROJECT_SESSION, "CodeProject.AI")
+
+
+def initialize_http_clients() -> None:
+    global FRIGATE_SESSION, PLATE_RECOGNIZER_SESSION, CODE_PROJECT_SESSION
+
+    if APP_CONFIG is None:
+        raise RuntimeError("Configuration must be loaded before initialising HTTP clients")
+
+    FRIGATE_SESSION = build_session(
+        timeout=APP_CONFIG.frigate.request_timeout,
+        retries=APP_CONFIG.frigate.api_retries,
+        verify=APP_CONFIG.frigate.verify_ssl,
+    )
+
+    if APP_CONFIG.plate_recognizer:
+        PLATE_RECOGNIZER_SESSION = build_session(
+            timeout=APP_CONFIG.plate_recognizer.request_timeout,
+            retries=APP_CONFIG.plate_recognizer.max_retries,
+            verify=APP_CONFIG.plate_recognizer.verify_ssl,
+        )
+    else:
+        PLATE_RECOGNIZER_SESSION = None
+
+    if APP_CONFIG.code_project:
+        CODE_PROJECT_SESSION = build_session(
+            timeout=APP_CONFIG.code_project.request_timeout,
+            retries=APP_CONFIG.code_project.max_retries,
+            verify=APP_CONFIG.code_project.verify_ssl,
+        )
+    else:
+        CODE_PROJECT_SESSION = None
 
 def on_connect(mqtt_client, userdata, flags, reason_code, properties):
     on_connect_counter.inc()
@@ -92,7 +149,12 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
     # Submit the POST request with the JSON payload
     payload = { "subLabel": sublabel }
     headers = { "Content-Type": "application/json" }
-    response = requests.post(post_url, data=json.dumps(payload), headers=headers)
+    session = get_frigate_session()
+    try:
+        response = session.post(post_url, data=json.dumps(payload), headers=headers)
+    except RequestException as exc:
+        _LOGGER.error(f"Failed to set sublabel due to HTTP error: {exc}")
+        return
 
     percent_score = "{:.1%}".format(score)
 
@@ -100,31 +162,41 @@ def set_sublabel(frigate_url, frigate_event_id, sublabel, score):
     if response.status_code == 200:
         _LOGGER.info(f"Sublabel set successfully to: {sublabel} with {percent_score} confidence")
     else:
-        _LOGGER.error(f"Failed to set sublabel. Status code: {response.status_code}")
+        _LOGGER.error(
+            "Failed to set sublabel. Status code: %s, response: %s",
+            response.status_code,
+            response.text,
+        )
 
 def code_project(image):
     code_project_counter.inc()
     api_url = config['code_project'].get('api_url')
+    session = get_code_project_session()
 
-    response = requests.post(
-        api_url,
-        files=dict(upload=image),
-    )
-    response = response.json()
+    try:
+        http_response = session.post(api_url, files=dict(upload=image))
+        http_response.raise_for_status()
+    except RequestException as exc:
+        _LOGGER.error(f"CodeProject.AI request failed: {exc}")
+        return None, None, None, None
+
+    try:
+        response = http_response.json()
+    except ValueError:
+        _LOGGER.error("CodeProject.AI returned invalid JSON response")
+        return None, None, None, None
+
     _LOGGER.debug(f"response: {response}")
 
-    if response.get('predictions') is None:
-        _LOGGER.error(f"Failed to get plate number. Response: {response}")
+    predictions = response.get('predictions')
+    if not predictions:
+        _LOGGER.debug("No plates found")
         return None, None, None, None
 
-    if len(response['predictions']) == 0:
-        _LOGGER.debug(f"No plates found")
-        return None, None, None, None
+    plate_number = predictions[0].get('plate')
+    score = predictions[0].get('confidence')
 
-    plate_number = response['predictions'][0].get('plate')
-    score = response['predictions'][0].get('confidence')
-
-    watched_plate, watched_score, fuzzy_score = check_watched_plates(plate_number, response['predictions'])
+    watched_plate, watched_score, fuzzy_score = check_watched_plates(plate_number, predictions)
     if fuzzy_score:
         return plate_number, score, watched_plate, fuzzy_score
     elif watched_plate:
@@ -132,51 +204,98 @@ def code_project(image):
     else:
         return plate_number, score, None, None
 
-def plate_recognizer(image, retries=3, delay=1):
+def plate_recognizer(image):
     plate_recognizer_counter.inc()
-    api_url = config['plate_recognizer'].get('api_url') or PLATE_RECOGIZER_BASE_URL
-    token = config['plate_recognizer']['token']
-    headers = {'Authorization': f'Token {token}'}
-    data = dict(regions=config['plate_recognizer']['regions'])
 
-    for attempt in range(retries):
-        response = requests.post(
-            api_url,
-            data=data,
-            files=dict(upload=image),
-            headers=headers
-        )
-        
-        if response.status_code == 429:  # Too Many Requests
-            _LOGGER.warning(f"Rate limit hit. Retrying in {delay} seconds...")
-            time.sleep(delay)
-            delay *= 2  # Exponential backoff
+    if APP_CONFIG is None or not APP_CONFIG.plate_recognizer:
+        _LOGGER.error("Plate Recognizer configuration missing")
+        return None, None, None, None
+
+    recognizer_config = APP_CONFIG.plate_recognizer
+    api_url = recognizer_config.api_url or PLATE_RECOGIZER_BASE_URL
+    headers = {'Authorization': f"Token {recognizer_config.token}"}
+    data = dict(regions=recognizer_config.regions)
+
+    session = get_plate_recognizer_session()
+
+    attempts = max(1, recognizer_config.max_retries + 1)
+    delay_seconds = 1
+
+    for attempt in range(1, attempts + 1):
+        try:
+            response = session.post(
+                api_url,
+                data=data,
+                files=dict(upload=image),
+                headers=headers,
+            )
+        except RequestException as exc:
+            _LOGGER.error(
+                "Plate Recognizer request failed (attempt %s/%s): %s",
+                attempt,
+                attempts,
+                exc,
+            )
+            if attempt == attempts:
+                plate_recognizer_err.inc()
+                return None, None, None, None
+            time.sleep(delay_seconds)
+            delay_seconds = min(delay_seconds * 2, 60)
             continue
 
-        if response.status_code != 201 and response.status_code != 200:
-            _LOGGER.error(f"API error: {response.status_code}, {response.text}")
+        if response.status_code == 429:
+            _LOGGER.warning(
+                "Plate Recognizer rate limit hit (attempt %s/%s). Retrying in %s seconds",
+                attempt,
+                attempts,
+                delay_seconds,
+            )
+            time.sleep(delay_seconds)
+            delay_seconds = min(delay_seconds * 2, 60)
+            continue
+
+        if response.status_code not in (200, 201):
+            _LOGGER.error(
+                "Plate Recognizer API error (attempt %s/%s): %s %s",
+                attempt,
+                attempts,
+                response.status_code,
+                response.text,
+            )
+            if attempt == attempts:
+                plate_recognizer_err.inc()
+                return None, None, None, None
+            time.sleep(delay_seconds)
+            delay_seconds = min(delay_seconds * 2, 60)
+            continue
+
+        try:
+            response_json = response.json()
+        except ValueError:
+            _LOGGER.error("Plate Recognizer returned invalid JSON response")
+            plate_recognizer_err.inc()
             return None, None, None, None
 
-        response_json = response.json()
         _LOGGER.debug(f"response: {response_json}")
 
-        if response_json.get('results') is None or len(response_json['results']) == 0:
+        results = response_json.get('results')
+        if not results:
             _LOGGER.debug(f"No plates found or invalid response: {response_json}")
             return None, None, None, None
 
-        plate_number = response_json['results'][0].get('plate')
-        score = response_json['results'][0].get('score')
+        plate_result = results[0]
+        plate_number = plate_result.get('plate')
+        score = plate_result.get('score')
         watched_plate, watched_score, fuzzy_score = check_watched_plates(
-            plate_number, response_json['results'][0].get('candidates')
+            plate_number, plate_result.get('candidates')
         )
         if fuzzy_score:
             return plate_number, score, watched_plate, fuzzy_score
-        elif watched_plate: 
+        if watched_plate:
             return plate_number, watched_score, watched_plate, None
-        else:
-            return plate_number, score, None, None
+        return plate_number, score, None, None
 
-    _LOGGER.error(f"Failed to get plate number after {retries} retries.")
+    _LOGGER.error("Failed to get plate number after exhausting retries")
     return None, None, None, None
 
 
@@ -367,7 +486,12 @@ def get_snapshot(frigate_event_id, frigate_url, cropped):
 
     # get snapshot
     parameters = {"crop": 1 if cropped else 0, "quality": 95}
-    response = requests.get(snapshot_url, params=parameters)
+    session = get_frigate_session()
+    try:
+        response = session.get(snapshot_url, params=parameters)
+    except RequestException as exc:
+        _LOGGER.error(f"Error getting snapshot: {exc}")
+        return
 
     # Check if the request was successful (HTTP status code 200)
     if response.status_code != 200:
@@ -386,11 +510,20 @@ def get_license_plate_attribute(after_data):
 
 def get_final_data(event_url):
     if config['frigate'].get('frigate_plus', False):
-        response = requests.get(event_url)
+        session = get_frigate_session()
+        try:
+            response = session.get(event_url)
+        except RequestException as exc:
+            _LOGGER.error(f"Error getting final data: {exc}")
+            return
         if response.status_code != 200:
             _LOGGER.error(f"Error getting final data: {response.status_code}")
             return
-        event_json = response.json()
+        try:
+            event_json = response.json()
+        except ValueError:
+            _LOGGER.error("Error parsing event JSON from Frigate")
+            return
         event_data = event_json.get('data', {})
 
         if event_data:
@@ -582,6 +715,8 @@ def load_config():
     db_path = APP_CONFIG.paths.db_path
     if not db_path.parent.exists():
         db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    initialize_http_clients()
 
 def run_mqtt_client():
     global mqtt_client
