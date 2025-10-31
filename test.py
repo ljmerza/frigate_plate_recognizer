@@ -4,12 +4,18 @@ import logging
 from pathlib import Path
 import os
 import unittest
+import tempfile
 from unittest.mock import patch, MagicMock, mock_open
 
 from PIL import Image, ImageDraw
-import yaml
 
 import index
+from frigate_plate_recognizer.config import (
+    AppConfig,
+    FrigateConfig,
+    PathsConfig,
+    PlateRecognizerConfig,
+)
 
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
@@ -18,17 +24,41 @@ class BaseTestCase(unittest.TestCase):
         self.mock_logger = mock_logger
 
 class TestLoadConfig(BaseTestCase):
-    @patch('os.path.isdir', return_value=False)
-    @patch('os.makedirs')
-    @patch('yaml.safe_load')
-    @patch('builtins.open', new_callable=mock_open, read_data="config: {}")
-    def test_load_config(self, mock_open, mock_safe_load, mock_makedirs, mock_isdir):
-        index.CONFIG_PATH = 'dummy_path'
-        index.load_config()
-        mock_open.assert_called_once_with('dummy_path', 'r')
-        mock_safe_load.assert_called_once()
-        mock_isdir.assert_called_once_with(index.SNAPSHOT_PATH)
-        mock_makedirs.assert_called_once_with(index.SNAPSHOT_PATH)
+    @patch('index.load_app_config')
+    def test_load_config(self, mock_load_app_config):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_path = Path(tmpdir)
+            paths = PathsConfig(
+                config_path=base_path / 'config.yml',
+                db_path=base_path / 'data' / 'frigate.db',
+                log_file=base_path / 'logs' / 'app.log',
+                snapshot_dir=base_path / 'plates',
+            )
+
+            frigate_cfg = FrigateConfig(
+                frigate_url='http://localhost:5000',
+                mqtt_server='mqtt.local',
+            )
+            plate_cfg = PlateRecognizerConfig(token='token', regions=['us-ca'])
+
+            app_cfg = AppConfig(
+                paths=paths,
+                frigate=frigate_cfg,
+                plate_recognizer=plate_cfg,
+                logger_level='DEBUG',
+            )
+
+            mock_load_app_config.return_value = app_cfg
+
+            index.load_config()
+
+            self.assertEqual(index.config, app_cfg.runtime_dict())
+            self.assertEqual(index.DB_PATH, str(paths.db_path))
+            self.assertEqual(index.LOG_FILE, str(paths.log_file))
+            self.assertEqual(index.SNAPSHOT_PATH, str(paths.snapshot_dir))
+            self.assertTrue(paths.snapshot_dir.exists())
+            self.assertTrue(paths.db_path.parent.exists())
+            self.assertTrue(paths.log_file.parent.exists())
 
 class TestSaveImage(BaseTestCase):
     def setUp(self):

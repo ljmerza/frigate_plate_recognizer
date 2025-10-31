@@ -1,5 +1,7 @@
 #!/bin/python3
 
+from __future__ import annotations
+
 from datetime import datetime
 import concurrent.futures
 import os
@@ -8,7 +10,6 @@ import time
 import logging
 
 import paho.mqtt.client as mqtt
-import yaml
 import sys
 import json
 import requests
@@ -18,6 +19,16 @@ from PIL import Image, ImageDraw, ImageFont
 import difflib
 import prometheus_client
 
+from frigate_plate_recognizer import __version__ as PACKAGE_VERSION
+from frigate_plate_recognizer.config import (
+    AppConfig,
+    DEFAULT_DB_PATH,
+    DEFAULT_LOG_FILE,
+    DEFAULT_METRICS_PORT,
+    DEFAULT_SNAPSHOT_DIR,
+    load_app_config,
+)
+
 mqtt_client = None
 config = None
 first_message = True
@@ -25,23 +36,20 @@ _LOGGER = None
 
 executor = None
 
-VERSION = '2.2.1'
+APP_CONFIG: AppConfig | None = None
 
-# set local paths for development
-LOCAL = os.getenv('LOCAL', False)
+VERSION = PACKAGE_VERSION
 
-CONFIG_PATH = f"{'' if LOCAL else '/'}config/config.yml"
-DB_PATH = f"{'' if LOCAL else '/'}config/frigate_plate_recogizer.db"
-LOG_FILE = f"{'' if LOCAL else '/'}config/frigate_plate_recogizer.log"
-SNAPSHOT_PATH = f"{'' if LOCAL else '/'}plates"
+DB_PATH = str(DEFAULT_DB_PATH)
+LOG_FILE = str(DEFAULT_LOG_FILE)
+SNAPSHOT_PATH = str(DEFAULT_SNAPSHOT_DIR)
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
 
 PLATE_RECOGIZER_BASE_URL = 'https://api.platerecognizer.com/v1/plate-reader'
 DEFAULT_OBJECTS = ['car', 'motorcycle', 'bus']
 CURRENT_EVENTS = {}
-
-PORT = 8080
+PORT = DEFAULT_METRICS_PORT
 
 on_connect_counter = prometheus_client.Counter('on_connect', 'count of connects')
 on_disconnect_counter = prometheus_client.Counter('on_disconnect', 'count of connects')
@@ -553,13 +561,27 @@ def setup_db():
     conn.close()
 
 def load_config():
-    global config
-    with open(CONFIG_PATH, 'r') as config_file:
-        config = yaml.safe_load(config_file)
+    global config, APP_CONFIG, DB_PATH, LOG_FILE, SNAPSHOT_PATH, PORT
 
-    if SNAPSHOT_PATH:
-        if not os.path.isdir(SNAPSHOT_PATH):
-            os.makedirs(SNAPSHOT_PATH)
+    APP_CONFIG = load_app_config()
+    config = APP_CONFIG.runtime_dict()
+
+    DB_PATH = str(APP_CONFIG.paths.db_path)
+    LOG_FILE = str(APP_CONFIG.paths.log_file)
+    SNAPSHOT_PATH = str(APP_CONFIG.paths.snapshot_dir)
+    PORT = APP_CONFIG.metrics_port
+
+    snapshot_dir = APP_CONFIG.paths.snapshot_dir
+    if not snapshot_dir.exists():
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = APP_CONFIG.paths.log_file
+    if not log_path.parent.exists():
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    db_path = APP_CONFIG.paths.db_path
+    if not db_path.parent.exists():
+        db_path.parent.mkdir(parents=True, exist_ok=True)
 
 def run_mqtt_client():
     global mqtt_client
@@ -610,8 +632,8 @@ def main():
     setup_db()
     load_logger()
 
-    _LOGGER.info(f"starting prom http server")
-    server, t = prometheus_client.start_http_server(8080)
+    _LOGGER.info("starting prom http server")
+    prometheus_client.start_http_server(PORT)
 
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     _LOGGER.info(f"Time: {current_time}")
@@ -625,7 +647,8 @@ def main():
         _LOGGER.info(f"Using CodeProject.AI API")
 
 
-    executor = concurrent.futures.ThreadPoolExecutor(max_workers=10)
+    max_workers = config.get('max_workers', 10)
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
     run_mqtt_client()
 
 
