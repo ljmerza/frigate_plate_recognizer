@@ -1,12 +1,29 @@
-FROM python:3.9
+FROM python:3.11-slim AS runtime
 
-WORKDIR /usr/src/app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+WORKDIR /app
 
-COPY index.py .
-COPY Arial.ttf .
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libjpeg-dev \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-ENTRYPOINT  ["python"]
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+RUN useradd --create-home --shell /bin/bash appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8080
+
+ENTRYPOINT ["python"]
 CMD ["./index.py"]
