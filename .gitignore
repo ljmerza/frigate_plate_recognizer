@@ -1,6 +1,12 @@
 __pycache__
 venv
 myenv
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
 
 config/*
 plates/*

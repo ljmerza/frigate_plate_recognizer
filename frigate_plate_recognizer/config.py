@@ -154,7 +154,8 @@ class AppConfig(BaseModel):
     metrics_port: int = Field(default=DEFAULT_METRICS_PORT, ge=1, le=65535)
     max_workers: int = Field(default=DEFAULT_MAX_WORKERS, ge=1, le=64)
 
-    @model_validator(mode="after")
+    @model_validator(mode="after")  # type: ignore[arg-type]
+    @classmethod
     def validate_recognizer(cls, values: "AppConfig") -> "AppConfig":
         if not (values.plate_recognizer or values.code_project):
             raise ValueError("Configure either plate_recognizer or code_project")

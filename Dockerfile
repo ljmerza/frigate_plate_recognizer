@@ -25,5 +25,4 @@ USER appuser
 
 EXPOSE 8080
 
-ENTRYPOINT ["python"]
-CMD ["./index.py"]
+ENTRYPOINT ["python", "-m", "frigate_plate_recognizer.app"]

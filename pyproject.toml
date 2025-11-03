@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=65"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "frigate-plate-recognizer"
+version = "2.2.1"
+description = "Identify license plates and publish enriched events for Frigate."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Frigate Plate Recognizer Maintainers" }]
+
+[tool.setuptools.packages.find]
+include = ["frigate_plate_recognizer*"]
+exclude = ["tests*", "config*", "plates*", "myenv*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["frigate_plate_recognizer", "tests", "."]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I"]
+ignore = ["E203", "E266", "E501"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["frigate_plate_recognizer"]
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
+pretty = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["frigate_plate_recognizer"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
