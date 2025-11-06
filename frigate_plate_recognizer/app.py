@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
+import signal
 import sqlite3
 import sys
 import time
@@ -16,6 +17,7 @@ from requests.exceptions import RequestException
 from frigate_plate_recognizer import __version__ as PACKAGE_VERSION
 from frigate_plate_recognizer.config import (
     DEFAULT_DB_PATH,
+    DEFAULT_HEALTHCHECK_PORT,
     DEFAULT_LOG_FILE,
     DEFAULT_METRICS_PORT,
     DEFAULT_SNAPSHOT_DIR,
@@ -38,6 +40,7 @@ from frigate_plate_recognizer.events import (
     is_event_tracked,
     track_event_start,
 )
+from frigate_plate_recognizer.healthcheck import start_healthcheck_server
 from frigate_plate_recognizer.http_client import build_session
 from frigate_plate_recognizer.images import (
     fetch_final_attributes,
@@ -64,6 +67,8 @@ first_message = True
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
+_shutdown_requested = False
+_mqtt_connected = False
 
 APP_CONFIG: AppConfig | None = None
 
@@ -94,7 +99,8 @@ LOG_FILE = str(DEFAULT_LOG_FILE)
 SNAPSHOT_PATH = str(DEFAULT_SNAPSHOT_DIR)
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
-PORT = DEFAULT_METRICS_PORT
+METRICS_PORT = DEFAULT_METRICS_PORT
+HEALTHCHECK_PORT = DEFAULT_HEALTHCHECK_PORT
 DB_TIMEOUT_SECONDS = 30
 DB_BUSY_TIMEOUT_MS = 5000
 
@@ -495,18 +501,26 @@ def load_config():
     initialize_http_clients()
 
 def run_mqtt_client():
-    global mqtt_client
+    global mqtt_client, _mqtt_connected
     cfg = require_config()
     logger = require_logger()
     logger.info(f"Starting MQTT client. Connecting to: {cfg['frigate']['mqtt_server']}")
+
+    def set_mqtt_connected(connected: bool) -> None:
+        global _mqtt_connected
+        _mqtt_connected = connected
 
     mqtt_client = create_mqtt_client(
         config=cfg,
         logger=logger,
         message_callback=on_message,
+        on_connected=set_mqtt_connected,
     )
     mqtt_client.connect(cfg['frigate']['mqtt_server'], cfg['frigate'].get('mqtt_port', 1883))
-    mqtt_client.loop_forever()
+    
+    # Loop with periodic checks for shutdown signal
+    while not _shutdown_requested:
+        mqtt_client.loop(timeout=1.0)
 
 def load_logger():
     cfg = require_config()
@@ -530,8 +544,35 @@ def load_logger():
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
+def is_healthy() -> bool:
+    """Check if the application is healthy."""
+    # Application is healthy if:
+    # 1. Not shutting down
+    # 2. MQTT is connected
+    # 3. Executor is running
+    return not _shutdown_requested and _mqtt_connected and executor is not None
+
+def _signal_handler(signum: int, frame: Any) -> None:
+    """Handle shutdown signals gracefully."""
+    global _shutdown_requested, mqtt_client
+    signal_name = signal.Signals(signum).name
+    _LOGGER.info(f"Received {signal_name} signal, initiating graceful shutdown...")
+    _shutdown_requested = True
+    
+    # Disconnect MQTT client
+    if mqtt_client:
+        try:
+            mqtt_client.disconnect()
+            _LOGGER.info("MQTT client disconnected")
+        except Exception as exc:
+            _LOGGER.warning(f"Error disconnecting MQTT client: {exc}")
+
 def main():
     global executor
+
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
 
     load_config()
     setup_db()
@@ -540,8 +581,12 @@ def main():
     cfg = require_config()
 
     _LOGGER.info("starting prom http server")
-    prometheus_client.start_http_server(PORT)
-    _LOGGER.info(f"Prometheus metrics listening on port {PORT}")
+    prometheus_client.start_http_server(METRICS_PORT)
+    _LOGGER.info(f"Prometheus metrics listening on port {METRICS_PORT}")
+    
+    # Start healthcheck server
+    start_healthcheck_server(HEALTHCHECK_PORT, health_check_fn=is_healthy)
+    _LOGGER.info(f"Healthcheck endpoint available at http://localhost:{HEALTHCHECK_PORT}/health")
 
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     _LOGGER.info(f"Time: {current_time}")
@@ -559,8 +604,12 @@ def main():
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
     try:
         run_mqtt_client()
+    except KeyboardInterrupt:
+        _LOGGER.info("Received keyboard interrupt, shutting down...")
     finally:
+        _LOGGER.info("Shutting down thread pool executor...")
         executor.shutdown(wait=True)
+        _LOGGER.info("Shutdown complete")
 
 
 if __name__ == '__main__':
