@@ -17,6 +17,7 @@ from requests.exceptions import RequestException
 from frigate_plate_recognizer import __version__ as PACKAGE_VERSION
 from frigate_plate_recognizer.config import (
     DEFAULT_DB_PATH,
+    DEFAULT_HEALTHCHECK_PORT,
     DEFAULT_LOG_FILE,
     DEFAULT_METRICS_PORT,
     DEFAULT_SNAPSHOT_DIR,
@@ -98,7 +99,8 @@ LOG_FILE = str(DEFAULT_LOG_FILE)
 SNAPSHOT_PATH = str(DEFAULT_SNAPSHOT_DIR)
 
 DATETIME_FORMAT = "%Y-%m-%d_%H-%M"
-PORT = DEFAULT_METRICS_PORT
+METRICS_PORT = DEFAULT_METRICS_PORT
+HEALTHCHECK_PORT = DEFAULT_HEALTHCHECK_PORT
 DB_TIMEOUT_SECONDS = 30
 DB_BUSY_TIMEOUT_MS = 5000
 
@@ -579,13 +581,12 @@ def main():
     cfg = require_config()
 
     _LOGGER.info("starting prom http server")
-    prometheus_client.start_http_server(PORT)
-    _LOGGER.info(f"Prometheus metrics listening on port {PORT}")
+    prometheus_client.start_http_server(METRICS_PORT)
+    _LOGGER.info(f"Prometheus metrics listening on port {METRICS_PORT}")
     
-    # Start healthcheck server on a different port
-    healthcheck_port = PORT + 1  # Use metrics port + 1 for healthcheck
-    start_healthcheck_server(healthcheck_port, health_check_fn=is_healthy)
-    _LOGGER.info(f"Healthcheck endpoint available at http://localhost:{healthcheck_port}/health")
+    # Start healthcheck server
+    start_healthcheck_server(HEALTHCHECK_PORT, health_check_fn=is_healthy)
+    _LOGGER.info(f"Healthcheck endpoint available at http://localhost:{HEALTHCHECK_PORT}/health")
 
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
     _LOGGER.info(f"Time: {current_time}")
