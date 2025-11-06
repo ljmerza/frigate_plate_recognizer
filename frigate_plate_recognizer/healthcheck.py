@@ -10,42 +10,44 @@ from typing import Callable
 logger = logging.getLogger(__name__)
 
 
-class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
-    """HTTP handler that responds to healthcheck requests."""
+def _make_handler(health_check_fn: Callable[[], bool] | None = None):
+    """Factory function to create handler class with health check function."""
 
-    # Class variable to hold the health check function
-    health_check_fn: Callable[[], bool] | None = None
+    class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
+        """HTTP handler that responds to healthcheck requests."""
 
-    def log_message(self, format: str, *args) -> None:
-        """Suppress default logging from BaseHTTPRequestHandler."""
-        pass
+        def log_message(self, format: str, *args) -> None:
+            """Suppress default logging from BaseHTTPRequestHandler."""
+            pass
 
-    def do_GET(self) -> None:
-        """Handle GET requests for healthcheck."""
-        if self.path == "/health":
-            is_healthy = True
-            if self.health_check_fn:
-                try:
-                    is_healthy = self.health_check_fn()
-                except Exception as exc:
-                    logger.error(f"Health check function raised exception: {exc}")
-                    is_healthy = False
+        def do_GET(self) -> None:
+            """Handle GET requests for healthcheck."""
+            if self.path == "/health":
+                is_healthy = True
+                if health_check_fn:
+                    try:
+                        is_healthy = health_check_fn()
+                    except Exception as exc:
+                        logger.error(f"Health check function raised exception: {exc}")
+                        is_healthy = False
 
-            if is_healthy:
-                self.send_response(200)
-                self.send_header("Content-type", "text/plain")
-                self.end_headers()
-                self.wfile.write(b"OK")
+                if is_healthy:
+                    self.send_response(200)
+                    self.send_header("Content-type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"OK")
+                else:
+                    self.send_response(503)
+                    self.send_header("Content-type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"Service Unavailable")
             else:
-                self.send_response(503)
+                self.send_response(404)
                 self.send_header("Content-type", "text/plain")
                 self.end_headers()
-                self.wfile.write(b"Service Unavailable")
-        else:
-            self.send_response(404)
-            self.send_header("Content-type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"Not Found")
+                self.wfile.write(b"Not Found")
+
+    return HealthCheckHandler
 
 
 def start_healthcheck_server(
@@ -61,9 +63,8 @@ def start_healthcheck_server(
     Returns:
         The thread running the server
     """
-    HealthCheckHandler.health_check_fn = health_check_fn
-
-    server = http.server.HTTPServer(("", port), HealthCheckHandler)
+    handler_class = _make_handler(health_check_fn)
+    server = http.server.HTTPServer(("", port), handler_class)
     logger.info(f"Starting healthcheck server on port {port}")
 
     thread = threading.Thread(target=server.serve_forever, daemon=True, name="healthcheck")
