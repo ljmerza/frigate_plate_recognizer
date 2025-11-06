@@ -3,6 +3,7 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import logging
+import signal
 import sqlite3
 import sys
 import time
@@ -64,6 +65,7 @@ first_message = True
 _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
+_shutdown_requested = False
 
 APP_CONFIG: AppConfig | None = None
 
@@ -506,7 +508,10 @@ def run_mqtt_client():
         message_callback=on_message,
     )
     mqtt_client.connect(cfg['frigate']['mqtt_server'], cfg['frigate'].get('mqtt_port', 1883))
-    mqtt_client.loop_forever()
+    
+    # Loop with periodic checks for shutdown signal
+    while not _shutdown_requested:
+        mqtt_client.loop(timeout=1.0)
 
 def load_logger():
     cfg = require_config()
@@ -530,8 +535,27 @@ def load_logger():
     logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
+def _signal_handler(signum: int, frame: Any) -> None:
+    """Handle shutdown signals gracefully."""
+    global _shutdown_requested, mqtt_client
+    signal_name = signal.Signals(signum).name
+    _LOGGER.info(f"Received {signal_name} signal, initiating graceful shutdown...")
+    _shutdown_requested = True
+    
+    # Disconnect MQTT client
+    if mqtt_client:
+        try:
+            mqtt_client.disconnect()
+            _LOGGER.info("MQTT client disconnected")
+        except Exception as exc:
+            _LOGGER.warning(f"Error disconnecting MQTT client: {exc}")
+
 def main():
     global executor
+
+    # Set up signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
 
     load_config()
     setup_db()
@@ -559,8 +583,12 @@ def main():
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=max_workers)
     try:
         run_mqtt_client()
+    except KeyboardInterrupt:
+        _LOGGER.info("Received keyboard interrupt, shutting down...")
     finally:
+        _LOGGER.info("Shutting down thread pool executor...")
         executor.shutdown(wait=True)
+        _LOGGER.info("Shutdown complete")
 
 
 if __name__ == '__main__':
