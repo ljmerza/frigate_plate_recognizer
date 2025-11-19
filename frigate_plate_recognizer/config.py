@@ -37,6 +37,7 @@ ENV_FIELD_MAP: Dict[str, Sequence[str]] = {
     "FRP_MAX_ATTEMPTS": ("frigate", "max_attempts"),
     "FRP_LOG_LEVEL": ("logger_level",),
     "FRP_METRICS_PORT": ("metrics_port",),
+    "FRP_HEALTHCHECK_PORT": ("healthcheck_port",),
     "FRP_MAX_WORKERS": ("max_workers",),
     "FRP_PLATE_RECOGNIZER_TOKEN": ("plate_recognizer", "token"),
     "FRP_PLATE_RECOGNIZER_API_URL": ("plate_recognizer", "api_url"),
@@ -153,6 +154,7 @@ class AppConfig(BaseModel):
     code_project: Optional[CodeProjectConfig] = None
     logger_level: str = "INFO"
     metrics_port: int = Field(default=DEFAULT_METRICS_PORT, ge=1, le=65535)
+    healthcheck_port: int = Field(default=DEFAULT_HEALTHCHECK_PORT, ge=1, le=65535)
     max_workers: int = Field(default=DEFAULT_MAX_WORKERS, ge=1, le=64)
 
     @model_validator(mode="after")  # type: ignore[arg-type]
@@ -176,6 +178,7 @@ class AppConfig(BaseModel):
             "frigate": self.frigate.model_dump(),
             "logger_level": self.logger_level,
             "metrics_port": self.metrics_port,
+            "healthcheck_port": self.healthcheck_port,
             "max_workers": self.max_workers,
         }
         if self.plate_recognizer:

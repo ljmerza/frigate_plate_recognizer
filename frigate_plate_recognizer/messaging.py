@@ -26,27 +26,39 @@ def make_on_connect(logger, config: Dict[str, Any], on_connected: Optional[Calla
     return _on_connect
 
 
-def make_on_disconnect(logger, on_connected: Optional[Callable] = None) -> Callable:
+def make_on_disconnect(logger, should_stop: Callable[[], bool], on_connected: Optional[Callable] = None) -> Callable:
     def _on_disconnect(client, userdata, flags, reason_code, properties):
         on_disconnect_counter.inc()
         if on_connected:
             on_connected(False)
-        if reason_code != 0:
-            logger.warning(
-                "Unexpected disconnection, trying to reconnect userdata:%s, flags:%s, properties:%s",
-                userdata,
-                flags,
-                properties,
-            )
-            while True:
-                try:
-                    client.reconnect()
-                    break
-                except Exception as exc:  # pragma: no cover - backoff loop is hard to test
-                    logger.warning("Reconnection failed due to %s, retrying in 60 seconds", exc)
-                    time.sleep(60)
-        else:
-            logger.error("Expected disconnection")
+
+        if reason_code == 0:
+            logger.info("MQTT disconnected cleanly")
+            return
+
+        logger.warning(
+            "Unexpected MQTT disconnection (userdata:%s, flags:%s, properties:%s); reconnecting",
+            userdata,
+            flags,
+            properties,
+        )
+
+        backoff_seconds = 5
+        while not should_stop():  # pragma: no cover - backoff loop timing is hard to test
+            try:
+                client.reconnect()
+                logger.info("MQTT reconnected")
+                if on_connected:
+                    on_connected(True)
+                return
+            except Exception as exc:
+                logger.warning(
+                    "MQTT reconnection failed (%s); retrying in %s seconds",
+                    exc,
+                    backoff_seconds,
+                )
+                time.sleep(backoff_seconds)
+                backoff_seconds = min(backoff_seconds * 2, 60)
 
     return _on_disconnect
 
@@ -105,11 +117,12 @@ def create_mqtt_client(
     logger,
     message_callback,
     on_connected: Optional[Callable] = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> mqtt.Client:
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.enable_logger()
     client.on_connect = make_on_connect(logger, config, on_connected)
-    client.on_disconnect = make_on_disconnect(logger, on_connected)
+    client.on_disconnect = make_on_disconnect(logger, should_stop or (lambda: False), on_connected)
     client.on_message = message_callback
 
     if config['frigate'].get('mqtt_username'):

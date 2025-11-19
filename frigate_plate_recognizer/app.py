@@ -494,7 +494,7 @@ def setup_db():
     )
 
 def load_config():
-    global config, APP_CONFIG, DB_PATH, LOG_FILE, SNAPSHOT_PATH, PORT
+    global config, APP_CONFIG, DB_PATH, LOG_FILE, SNAPSHOT_PATH, METRICS_PORT, HEALTHCHECK_PORT
 
     APP_CONFIG = load_app_config()
     config = APP_CONFIG.runtime_dict()
@@ -502,7 +502,8 @@ def load_config():
     DB_PATH = str(APP_CONFIG.paths.db_path)
     LOG_FILE = str(APP_CONFIG.paths.log_file)
     SNAPSHOT_PATH = str(APP_CONFIG.paths.snapshot_dir)
-    PORT = APP_CONFIG.metrics_port
+    METRICS_PORT = APP_CONFIG.metrics_port
+    HEALTHCHECK_PORT = APP_CONFIG.healthcheck_port
 
     snapshot_dir = APP_CONFIG.paths.snapshot_dir
     if not snapshot_dir.exists():
@@ -533,6 +534,7 @@ def run_mqtt_client():
         logger=logger,
         message_callback=on_message,
         on_connected=set_mqtt_connected,
+        should_stop=lambda: _shutdown_requested,
     )
     mqtt_client.connect(cfg['frigate']['mqtt_server'], cfg['frigate'].get('mqtt_port', 1883))
     
