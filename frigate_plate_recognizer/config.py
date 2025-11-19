@@ -14,6 +14,7 @@ DEFAULT_DB_PATH = Path("/config/frigate_plate_recognizer.db")
 DEFAULT_LOG_FILE = Path("/config/frigate_plate_recognizer.log")
 DEFAULT_SNAPSHOT_DIR = Path("/plates")
 DEFAULT_METRICS_PORT = 8080
+DEFAULT_HEALTHCHECK_PORT = 8081
 DEFAULT_MAX_WORKERS = 10
 
 ENV_BOOL_VALUES = {"1", "true", "t", "yes", "y", "on"}

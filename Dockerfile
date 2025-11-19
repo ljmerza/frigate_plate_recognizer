@@ -10,6 +10,7 @@ RUN apt-get update \
         build-essential \
         libjpeg-dev \
         zlib1g-dev \
+        wget \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -23,6 +24,9 @@ RUN useradd --create-home --shell /bin/bash appuser \
 
 USER appuser
 
-EXPOSE 8080
+EXPOSE 8080 8081
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8081/health || exit 1
 
 ENTRYPOINT ["python", "-m", "frigate_plate_recognizer.app"]

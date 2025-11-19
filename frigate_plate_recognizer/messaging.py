@@ -15,18 +15,22 @@ from .metrics import (
 )
 
 
-def make_on_connect(logger, config: Dict[str, Any]) -> Callable:
+def make_on_connect(logger, config: Dict[str, Any], on_connected: Optional[Callable] = None) -> Callable:
     def _on_connect(client, userdata, flags, reason_code, properties):
         on_connect_counter.inc()
         logger.info("MQTT Connected")
         client.subscribe(config['frigate']['main_topic'] + "/events")
+        if on_connected:
+            on_connected(True)
 
     return _on_connect
 
 
-def make_on_disconnect(logger) -> Callable:
+def make_on_disconnect(logger, on_connected: Optional[Callable] = None) -> Callable:
     def _on_disconnect(client, userdata, flags, reason_code, properties):
         on_disconnect_counter.inc()
+        if on_connected:
+            on_connected(False)
         if reason_code != 0:
             logger.warning(
                 "Unexpected disconnection, trying to reconnect userdata:%s, flags:%s, properties:%s",
@@ -100,11 +104,12 @@ def create_mqtt_client(
     config: Dict[str, Any],
     logger,
     message_callback,
+    on_connected: Optional[Callable] = None,
 ) -> mqtt.Client:
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
     client.enable_logger()
-    client.on_connect = make_on_connect(logger, config)
-    client.on_disconnect = make_on_disconnect(logger)
+    client.on_connect = make_on_connect(logger, config, on_connected)
+    client.on_disconnect = make_on_disconnect(logger, on_connected)
     client.on_message = message_callback
 
     if config['frigate'].get('mqtt_username'):
