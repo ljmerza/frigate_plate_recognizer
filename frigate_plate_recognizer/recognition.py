@@ -30,6 +30,8 @@ def check_watched_plates(
     candidates: Optional[Iterable[Dict[str, Any]]],
     runtime_config: Dict[str, Any],
     logger,
+    *,
+    top_score: Optional[float] = None,
 ) -> Tuple[Optional[str], Optional[float], Optional[float]]:
     if not plate_number:
         return None, None, None
@@ -43,9 +45,8 @@ def check_watched_plates(
 
     # Step 1 - exact match on top plate
     if str(plate_number).lower() in watched_set:
-        plate_recognizer_err.inc()
         logger.info("Recognised plate is a Watched Plate: %s", plate_number)
-        return None, None, None
+        return plate_number, top_score, None
 
     # Step 2 - examine AI candidates
     if candidates:
@@ -132,7 +133,11 @@ def recognize_with_code_project(
     plate_number = top_prediction.get('plate')
     score = top_prediction.get('confidence')
     watched_plate, watched_score, fuzzy_score = check_watched_plates(
-        plate_number, predictions, runtime_config, logger
+        plate_number,
+        predictions,
+        runtime_config,
+        logger,
+        top_score=score,
     )
     if fuzzy_score:
         return plate_number, score, watched_plate, fuzzy_score
@@ -232,6 +237,7 @@ def recognize_with_plate_recognizer(
             top_result.get('candidates') or [],
             runtime_config,
             logger,
+            top_score=score,
         )
         if fuzzy_score:
             return plate_number, score, watched_plate, fuzzy_score

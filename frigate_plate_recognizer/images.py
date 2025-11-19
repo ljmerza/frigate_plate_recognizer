@@ -98,14 +98,17 @@ def save_image(
         logger.debug("Skipping saving snapshot because save_snapshots is set to false")
         return
 
-    event_url = f"{frigate_url}/api/events/{frigate_event_id}"
-    final_attribute = fetch_final_attributes(
-        session,
-        event_url=event_url,
-        use_frigate_plus=config['frigate'].get('frigate_plus', False),
-        logger=logger,
-        histogram=histogram,
-    )
+    draw_box = config['frigate'].get('draw_box', False)
+    final_attribute: Optional[Sequence[Dict[str, Any]]] = None
+    if draw_box:
+        event_url = f"{frigate_url}/api/events/{frigate_event_id}"
+        final_attribute = fetch_final_attributes(
+            session,
+            event_url=event_url,
+            use_frigate_plus=config['frigate'].get('frigate_plus', False),
+            logger=logger,
+            histogram=histogram,
+        )
 
     snapshot = fetch_snapshot(
         session,
@@ -120,9 +123,13 @@ def save_image(
 
     image = Image.open(io.BytesIO(bytearray(snapshot)))
     draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype("./Arial.ttf", size=14)
+    if draw_box and final_attribute:
+        try:
+            font = ImageFont.truetype("./Arial.ttf", size=14)
+        except OSError:
+            logger.debug("Falling back to default font; Arial.ttf not found or unreadable")
+            font = ImageFont.load_default()
 
-    if final_attribute:
         image_width, image_height = image.size
         dimension_1 = final_attribute[0]['box'][0]
         dimension_2 = final_attribute[0]['box'][1]

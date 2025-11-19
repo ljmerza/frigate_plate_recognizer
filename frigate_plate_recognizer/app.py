@@ -67,6 +67,13 @@ executor: Optional[concurrent.futures.ThreadPoolExecutor] = None
 
 APP_CONFIG: AppConfig | None = None
 
+_SENSITIVE_KEYS = {
+    'token',
+    'password',
+    'mqtt_password',
+    'mqtt_username',
+}
+
 
 def require_config() -> Dict[str, Any]:
     if config is None:
@@ -82,6 +89,17 @@ def require_app_config() -> AppConfig:
     if APP_CONFIG is None:
         raise RuntimeError("App configuration has not been loaded")
     return APP_CONFIG
+
+
+def _redact_config(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: ("***" if key in _SENSITIVE_KEYS else _redact_config(sub_value))
+            for key, sub_value in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_config(item) for item in value]
+    return value
 
 FRIGATE_SESSION: Optional[Session] = None
 PLATE_RECOGNIZER_SESSION: Optional[Session] = None
@@ -132,7 +150,7 @@ def initialize_http_clients() -> None:
     if APP_CONFIG.plate_recognizer:
         PLATE_RECOGNIZER_SESSION = build_session(
             timeout=APP_CONFIG.plate_recognizer.request_timeout,
-            retries=APP_CONFIG.plate_recognizer.max_retries,
+            retries=0,  # manual retry loop handles 429/backoff in recognition.py
             verify=APP_CONFIG.plate_recognizer.verify_ssl,
         )
     else:
@@ -547,7 +565,7 @@ def main():
     _LOGGER.info(f"Time: {current_time}")
     _LOGGER.info(f"Python Version: {sys.version}")
     _LOGGER.info(f"Frigate Plate Recognizer Version: {VERSION}")
-    _LOGGER.debug(f"config: {cfg}")
+    _LOGGER.debug("config (redacted): %s", _redact_config(cfg))
 
     if cfg.get('plate_recognizer'):
         _LOGGER.info("Using Plate Recognizer API")

@@ -22,7 +22,7 @@ def initialise_database(db_path: str, *, timeout_seconds: int, busy_timeout_ms: 
             CREATE TABLE IF NOT EXISTS plates (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 detection_time TIMESTAMP NOT NULL,
-                score TEXT NOT NULL,
+                score REAL NOT NULL,
                 plate_number TEXT NOT NULL,
                 frigate_event TEXT NOT NULL UNIQUE,
                 camera_name TEXT NOT NULL
