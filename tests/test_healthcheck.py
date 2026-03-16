@@ -5,19 +5,33 @@ from __future__ import annotations
 import time
 from http.client import HTTPConnection
 
+import pytest
+
 from frigate_plate_recognizer.healthcheck import start_healthcheck_server
 
 
-def test_healthcheck_returns_200_by_default():
+@pytest.fixture()
+def healthcheck_server():
+    """Start a healthcheck server and shut it down after the test."""
+    servers = []
+
+    def _start(port, **kwargs):
+        server, thread = start_healthcheck_server(port, **kwargs)
+        servers.append(server)
+        return server, thread
+
+    yield _start
+
+    for s in servers:
+        s.shutdown()
+
+
+def test_healthcheck_returns_200_by_default(healthcheck_server):
     """Test healthcheck endpoint returns 200 OK when no check function provided."""
-    # Start server on random available port
     port = 19999
-    start_healthcheck_server(port)
-    
-    # Give server time to start
+    healthcheck_server(port)
     time.sleep(0.5)
-    
-    # Make request
+
     conn = HTTPConnection("localhost", port, timeout=2)
     try:
         conn.request("GET", "/health")
@@ -29,16 +43,16 @@ def test_healthcheck_returns_200_by_default():
         conn.close()
 
 
-def test_healthcheck_returns_200_when_healthy():
+def test_healthcheck_returns_200_when_healthy(healthcheck_server):
     """Test healthcheck endpoint returns 200 when check function returns True."""
     port = 19998
-    
+
     def always_healthy() -> bool:
         return True
-    
-    start_healthcheck_server(port, health_check_fn=always_healthy)
+
+    healthcheck_server(port, health_check_fn=always_healthy)
     time.sleep(0.5)
-    
+
     conn = HTTPConnection("localhost", port, timeout=2)
     try:
         conn.request("GET", "/health")
@@ -50,16 +64,16 @@ def test_healthcheck_returns_200_when_healthy():
         conn.close()
 
 
-def test_healthcheck_returns_503_when_unhealthy():
+def test_healthcheck_returns_503_when_unhealthy(healthcheck_server):
     """Test healthcheck endpoint returns 503 when check function returns False."""
     port = 19997
-    
+
     def always_unhealthy() -> bool:
         return False
-    
-    start_healthcheck_server(port, health_check_fn=always_unhealthy)
+
+    healthcheck_server(port, health_check_fn=always_unhealthy)
     time.sleep(0.5)
-    
+
     conn = HTTPConnection("localhost", port, timeout=2)
     try:
         conn.request("GET", "/health")
@@ -71,16 +85,16 @@ def test_healthcheck_returns_503_when_unhealthy():
         conn.close()
 
 
-def test_healthcheck_returns_503_when_check_raises():
+def test_healthcheck_returns_503_when_check_raises(healthcheck_server):
     """Test healthcheck endpoint returns 503 when check function raises exception."""
     port = 19996
-    
+
     def raising_check() -> bool:
         raise RuntimeError("Something went wrong")
-    
-    start_healthcheck_server(port, health_check_fn=raising_check)
+
+    healthcheck_server(port, health_check_fn=raising_check)
     time.sleep(0.5)
-    
+
     conn = HTTPConnection("localhost", port, timeout=2)
     try:
         conn.request("GET", "/health")
@@ -92,12 +106,12 @@ def test_healthcheck_returns_503_when_check_raises():
         conn.close()
 
 
-def test_healthcheck_returns_404_for_unknown_path():
+def test_healthcheck_returns_404_for_unknown_path(healthcheck_server):
     """Test healthcheck endpoint returns 404 for non-health paths."""
     port = 19995
-    start_healthcheck_server(port)
+    healthcheck_server(port)
     time.sleep(0.5)
-    
+
     conn = HTTPConnection("localhost", port, timeout=2)
     try:
         conn.request("GET", "/unknown")

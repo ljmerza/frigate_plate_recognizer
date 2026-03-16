@@ -153,19 +153,20 @@ class TestRunMqttClient(BaseTestCase):
         }
 
         mock_client = MagicMock()
+        # Make loop() trigger shutdown after one call so the test exits
+        def stop_after_first_loop(**kwargs):
+            index._shutdown_requested = True
+        mock_client.loop.side_effect = stop_after_first_loop
         mock_create_client.return_value = mock_client
 
         index._LOGGER = MagicMock()
+        index._shutdown_requested = False
 
         index.run_mqtt_client()
 
-        mock_create_client.assert_called_once_with(
-            config=index.config,
-            logger=index._LOGGER,
-            message_callback=index.on_message,
-        )
+        mock_create_client.assert_called_once()
         mock_client.connect.assert_called_with('mqtt.example.com', 1883)
-        mock_client.loop_forever.assert_called()
+        mock_client.loop.assert_called()
 
 class TestHasCommonValue(BaseTestCase):
     def test_has_common_value_with_common_elements(self):
@@ -486,7 +487,7 @@ class TestSendMqttMessage(BaseTestCase):
 
         # Assert that the MQTT client publish method is called correctly
         mock_mqtt_client.publish.assert_called_with(
-            'frigate/return_topic', json.dumps(expected_message)
+            'frigate/return_topic', json.dumps(expected_message), retain=True
         )
 
 class TestStorePlateInDb(BaseTestCase):

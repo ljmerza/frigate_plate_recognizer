@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frigate-plate-recognizer"
-version = "2.2.1"
+version = "2.3.0"
 description = "Identify license plates and publish enriched events for Frigate."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -34,7 +34,7 @@ pretty = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --timeout=30"
 testpaths = ["tests"]
 
 [tool.coverage.run]

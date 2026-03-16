@@ -52,7 +52,7 @@ def _make_handler(health_check_fn: Callable[[], bool] | None = None):
 
 def start_healthcheck_server(
     port: int, health_check_fn: Callable[[], bool] | None = None
-) -> threading.Thread:
+) -> tuple[http.server.HTTPServer, threading.Thread]:
     """
     Start a simple HTTP healthcheck server in a background thread.
 
@@ -61,7 +61,7 @@ def start_healthcheck_server(
         health_check_fn: Optional function that returns True if healthy, False otherwise
 
     Returns:
-        The thread running the server
+        A tuple of (server, thread) so callers can call server.shutdown()
     """
     handler_class = _make_handler(health_check_fn)
     server = http.server.HTTPServer(("", port), handler_class)
@@ -70,7 +70,7 @@ def start_healthcheck_server(
     thread = threading.Thread(target=server.serve_forever, daemon=True, name="healthcheck")
     thread.start()
 
-    return thread
+    return server, thread
 
 
 __all__ = ["start_healthcheck_server"]

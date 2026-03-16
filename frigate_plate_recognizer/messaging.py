@@ -108,7 +108,7 @@ def publish_plate_message(
     return_topic = config['frigate']['return_topic']
     topic = f'{main_topic}/{return_topic}'
 
-    mqtt_client.publish(topic, json.dumps(message))
+    mqtt_client.publish(topic, json.dumps(message), retain=True)
 
 
 def create_mqtt_client(

@@ -605,7 +605,7 @@ def main():
     _LOGGER.info(f"Prometheus metrics listening on port {METRICS_PORT}")
     
     # Start healthcheck server
-    start_healthcheck_server(HEALTHCHECK_PORT, health_check_fn=is_healthy)
+    _hc_server, _hc_thread = start_healthcheck_server(HEALTHCHECK_PORT, health_check_fn=is_healthy)
     _LOGGER.info(f"Healthcheck endpoint available at http://localhost:{HEALTHCHECK_PORT}/health")
 
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
