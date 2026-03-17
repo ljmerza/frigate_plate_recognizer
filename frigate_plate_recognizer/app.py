@@ -370,6 +370,9 @@ def store_plate_in_db(plate_number, plate_score, frigate_event_id, after_data, f
 
 def on_message(client, userdata, message):
     global executor
+    if executor is None:
+        _LOGGER.warning("Received MQTT message before executor was initialized, ignoring")
+        return
     executor.submit(process_message, message)
 
 def process_message(message):
@@ -626,6 +629,9 @@ def main():
         run_mqtt_client()
     except KeyboardInterrupt:
         _LOGGER.info("Received keyboard interrupt, shutting down...")
+    except Exception:
+        _LOGGER.exception("Unhandled error in main loop")
+        raise
     finally:
         _LOGGER.info("Shutting down thread pool executor...")
         executor.shutdown(wait=True)
