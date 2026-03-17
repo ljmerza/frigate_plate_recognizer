@@ -5,12 +5,12 @@ from __future__ import annotations
 import prometheus_client
 
 on_connect_counter = prometheus_client.Counter('on_connect', 'count of connects')
-on_disconnect_counter = prometheus_client.Counter('on_disconnect', 'count of connects')
+on_disconnect_counter = prometheus_client.Counter('on_disconnect', 'count of disconnects')
 mqtt_sends_counter = prometheus_client.Counter('mqtt_sends', 'count of sends', ['watched'])
 
-code_project_counter = prometheus_client.Counter('code_project_calls', 'count of sends')
-plate_recognizer_counter = prometheus_client.Counter('plate_recognizer_calls', 'count of sends')
-plate_recognizer_err = prometheus_client.Counter('plate_recognizer_errors', 'count of sends')
+code_project_counter = prometheus_client.Counter('code_project_calls', 'count of calls')
+plate_recognizer_counter = prometheus_client.Counter('plate_recognizer_calls', 'count of calls')
+plate_recognizer_err = prometheus_client.Counter('plate_recognizer_errors', 'count of errors')
 
 http_request_latency_histogram = prometheus_client.Histogram(
     'http_request_duration_seconds',
