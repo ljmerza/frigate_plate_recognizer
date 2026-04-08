@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, Optional
 
-DEFAULT_OBJECTS = ('car', 'motorcycle', 'bus')
+DEFAULT_OBJECTS = ("car", "motorcycle", "bus")
 
 
 def check_first_message(first_message: bool, logger) -> bool:
@@ -22,48 +22,50 @@ def check_invalid_event(
     is_tracked: bool,
     logger,
 ) -> bool:
-    config_zones: Iterable[str] = config['frigate'].get('zones', [])
-    config_cameras: Iterable[str] = config['frigate'].get('camera', [])
+    config_zones: Iterable[str] = config["frigate"].get("zones", [])
+    config_cameras: Iterable[str] = config["frigate"].get("camera", [])
 
     matching_zone = (
-        any(value in after_data.get('current_zones', []) for value in config_zones)
+        any(value in after_data.get("current_zones", []) for value in config_zones)
         if config_zones
         else True
     )
-    camera = after_data.get('camera')
+    camera = after_data.get("camera")
     matching_camera = (camera in list(config_cameras)) if config_cameras else True
 
     if not (matching_zone and matching_camera):
         logger.debug(
             "Skipping event: %s because it does not match the configured zones/cameras",
-            after_data.get('id'),
+            after_data.get("id"),
         )
         return True
 
-    valid_objects = config['frigate'].get('objects', DEFAULT_OBJECTS)
-    if after_data.get('label') not in valid_objects:
-        logger.debug("is not a correct label: %s", after_data.get('label'))
+    valid_objects = config["frigate"].get("objects", DEFAULT_OBJECTS)
+    if after_data.get("label") not in valid_objects:
+        logger.debug("is not a correct label: %s", after_data.get("label"))
         return True
 
     if (
-        before_data.get('top_score') == after_data.get('top_score')
+        before_data.get("top_score") == after_data.get("top_score")
         and is_tracked
-        and not config['frigate'].get('frigate_plus', False)
+        and not config["frigate"].get("frigate_plus", False)
     ):
         logger.debug(
             "duplicated snapshot from Frigate as top_score from before and after are the same: %s %s",
-            after_data.get('top_score'),
-            after_data.get('id'),
+            after_data.get("top_score"),
+            after_data.get("id"),
         )
         return True
 
     return False
 
 
-def get_license_plate_attribute(config: Dict[str, Any], after_data: Dict[str, Any]) -> Optional[list]:
-    if config['frigate'].get('frigate_plus', False):
-        attributes = after_data.get('current_attributes', [])
-        return [attribute for attribute in attributes if attribute.get('label') == 'license_plate']
+def get_license_plate_attribute(
+    config: Dict[str, Any], after_data: Dict[str, Any]
+) -> Optional[list]:
+    if config["frigate"].get("frigate_plus", False):
+        attributes = after_data.get("current_attributes", [])
+        return [attribute for attribute in attributes if attribute.get("label") == "license_plate"]
     return None
 
 
@@ -78,8 +80,8 @@ def is_valid_license_plate(
         logger.debug("no license_plate attribute found in event attributes")
         return False
 
-    license_plate_min_score = config['frigate'].get('license_plate_min_score', 0)
-    score = attributes[0].get('score', 0) if isinstance(attributes[0], dict) else 0
+    license_plate_min_score = config["frigate"].get("license_plate_min_score", 0)
+    score = attributes[0].get("score", 0) if isinstance(attributes[0], dict) else 0
     if score < license_plate_min_score:
         logger.debug(
             "license_plate attribute score is below minimum: %s",
@@ -91,9 +93,9 @@ def is_valid_license_plate(
 
 
 __all__ = [
-    'DEFAULT_OBJECTS',
-    'check_first_message',
-    'check_invalid_event',
-    'get_license_plate_attribute',
-    'is_valid_license_plate',
+    "DEFAULT_OBJECTS",
+    "check_first_message",
+    "check_invalid_event",
+    "get_license_plate_attribute",
+    "is_valid_license_plate",
 ]

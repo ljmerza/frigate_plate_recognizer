@@ -14,7 +14,9 @@ def _configure_connection(conn: sqlite3.Connection, busy_timeout_ms: int) -> Non
     conn.execute("PRAGMA foreign_keys=ON")
 
 
-def initialise_database(db_path: str, *, timeout_seconds: int, busy_timeout_ms: int, logger) -> None:
+def initialise_database(
+    db_path: str, *, timeout_seconds: int, busy_timeout_ms: int, logger
+) -> None:
     with sqlite3.connect(db_path, timeout=timeout_seconds) as conn:
         _configure_connection(conn, busy_timeout_ms)
         conn.execute(
@@ -52,14 +54,14 @@ def insert_plate(
                 VALUES (?, ?, ?, ?, ?)""",
                 (detection_time, score, plate_number, frigate_event_id, camera_name),
             )
-        db_writes_counter.labels(status='success').inc()
+        db_writes_counter.labels(status="success").inc()
         return True
     except sqlite3.IntegrityError as exc:
-        db_errors_counter.labels(operation='insert').inc()
+        db_errors_counter.labels(operation="insert").inc()
         logger.debug("Plate for event %s already stored: %s", frigate_event_id, exc)
         return False
     except sqlite3.Error as exc:
-        db_errors_counter.labels(operation='insert').inc()
+        db_errors_counter.labels(operation="insert").inc()
         logger.error("SQLite error storing plate %s: %s", frigate_event_id, exc)
         raise
 
@@ -83,8 +85,9 @@ def has_processed_event(
         return True
     return False
 
+
 __all__ = [
-    'initialise_database',
-    'insert_plate',
-    'has_processed_event',
+    "initialise_database",
+    "insert_plate",
+    "has_processed_event",
 ]

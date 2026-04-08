@@ -15,18 +15,22 @@ from .metrics import (
 )
 
 
-def make_on_connect(logger, config: Dict[str, Any], on_connected: Optional[Callable] = None) -> Callable:
+def make_on_connect(
+    logger, config: Dict[str, Any], on_connected: Optional[Callable] = None
+) -> Callable:
     def _on_connect(client, userdata, flags, reason_code, properties):
         on_connect_counter.inc()
         logger.info("MQTT Connected")
-        client.subscribe(config['frigate']['main_topic'] + "/events")
+        client.subscribe(config["frigate"]["main_topic"] + "/events")
         if on_connected:
             on_connected(True)
 
     return _on_connect
 
 
-def make_on_disconnect(logger, should_stop: Callable[[], bool], on_connected: Optional[Callable] = None) -> Callable:
+def make_on_disconnect(
+    logger, should_stop: Callable[[], bool], on_connected: Optional[Callable] = None
+) -> Callable:
     def _on_disconnect(client, userdata, flags, reason_code, properties):
         on_disconnect_counter.inc()
         if on_connected:
@@ -76,37 +80,37 @@ def publish_plate_message(
     fuzzy_score: Optional[float],
     logger,
 ) -> None:
-    if not config['frigate'].get('return_topic'):
+    if not config["frigate"].get("return_topic"):
         return
 
     mqtt_sends_counter.labels(watched=bool(watched_plate)).inc()
 
     if watched_plate:
         message = {
-            'plate_number': str(watched_plate).upper(),
-            'score': plate_score,
-            'frigate_event_id': frigate_event_id,
-            'camera_name': after_data['camera'],
-            'start_time': formatted_start_time,
-            'fuzzy_score': fuzzy_score,
-            'original_plate': str(plate_number).upper(),
-            'is_watched_plate': True,
+            "plate_number": str(watched_plate).upper(),
+            "score": plate_score,
+            "frigate_event_id": frigate_event_id,
+            "camera_name": after_data["camera"],
+            "start_time": formatted_start_time,
+            "fuzzy_score": fuzzy_score,
+            "original_plate": str(plate_number).upper(),
+            "is_watched_plate": True,
         }
     else:
         message = {
-            'plate_number': str(plate_number).upper() if plate_number else None,
-            'score': plate_score,
-            'frigate_event_id': frigate_event_id,
-            'camera_name': after_data['camera'],
-            'start_time': formatted_start_time,
-            'is_watched_plate': False,
+            "plate_number": str(plate_number).upper() if plate_number else None,
+            "score": plate_score,
+            "frigate_event_id": frigate_event_id,
+            "camera_name": after_data["camera"],
+            "start_time": formatted_start_time,
+            "is_watched_plate": False,
         }
 
     logger.debug("Sending MQTT message: %s", message)
 
-    main_topic = config['frigate']['main_topic']
-    return_topic = config['frigate']['return_topic']
-    topic = f'{main_topic}/{return_topic}'
+    main_topic = config["frigate"]["main_topic"]
+    return_topic = config["frigate"]["return_topic"]
+    topic = f"{main_topic}/{return_topic}"
 
     mqtt_client.publish(topic, json.dumps(message), retain=True)
 
@@ -125,12 +129,12 @@ def create_mqtt_client(
     client.on_disconnect = make_on_disconnect(logger, should_stop or (lambda: False), on_connected)
     client.on_message = message_callback
 
-    if config['frigate'].get('mqtt_username'):
-        username = config['frigate']['mqtt_username']
-        password = config['frigate'].get('mqtt_password', '')
+    if config["frigate"].get("mqtt_username"):
+        username = config["frigate"]["mqtt_username"]
+        password = config["frigate"].get("mqtt_password", "")
         client.username_pw_set(username, password)
 
     return client
 
 
-__all__ = ['publish_plate_message', 'create_mqtt_client', 'make_on_connect', 'make_on_disconnect']
+__all__ = ["publish_plate_message", "create_mqtt_client", "make_on_connect", "make_on_disconnect"]

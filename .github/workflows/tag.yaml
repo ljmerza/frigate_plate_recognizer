@@ -8,32 +8,10 @@ on:
 
 jobs:
   test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install --no-cache-dir -r requirements-dev.txt
-
-    - name: Lint with Ruff
-      run: ruff check .
-
-    - name: Type check with mypy
-      run: mypy frigate_plate_recognizer
-
-    - name: Run tests with coverage
-      run: pytest --cov=frigate_plate_recognizer --cov-report=xml --cov-report=term
-
+    uses: ljmerza/misc-actions/.github/workflows/python-tests.yml@v1
+    with:
+      python-version: "3.11"
+      coverage-source: "frigate_plate_recognizer"
 
   release:
     name: Create Release
@@ -56,7 +34,7 @@ jobs:
           release_name: Release ${{ steps.tag_name.outputs.tag }}
           draft: false
           prerelease: false
-  
+
   docker_tag:
     name: Create Docker Tag
     needs: test
@@ -65,20 +43,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-         
       - name: Build and push tag
-        uses: docker/build-push-action@v5
+        uses: ljmerza/misc-actions/actions/docker-build-push@v1
         with:
-          push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}:${{ github.ref_name }}
+          image-name: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}
+          registry: docker.io
+          registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
+          registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
+          tags: |
+            type=ref,event=tag

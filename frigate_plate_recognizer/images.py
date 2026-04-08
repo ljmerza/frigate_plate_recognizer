@@ -34,7 +34,7 @@ def fetch_snapshot(
         logger.error("Error getting snapshot: %s", exc)
         return None
     finally:
-        histogram.labels('frigate', 'snapshot').observe(time.perf_counter() - start_time)
+        histogram.labels("frigate", "snapshot").observe(time.perf_counter() - start_time)
 
     if response.status_code != 200:
         logger.error("Error getting snapshot: %s", response.status_code)
@@ -61,7 +61,7 @@ def fetch_final_attributes(
         logger.error("Error getting final data: %s", exc)
         return None
     finally:
-        histogram.labels('frigate', 'event_data').observe(time.perf_counter() - start_time)
+        histogram.labels("frigate", "event_data").observe(time.perf_counter() - start_time)
 
     if response.status_code != 200:
         logger.error("Error getting final data: %s", response.status_code)
@@ -73,12 +73,12 @@ def fetch_final_attributes(
         logger.error("Error parsing event JSON from Frigate")
         return None
 
-    event_data = event_json.get('data', {})
+    event_data = event_json.get("data", {})
     if not event_data:
         return None
 
-    attributes = event_data.get('attributes', [])
-    return [attribute for attribute in attributes if attribute.get('label') == 'license_plate']
+    attributes = event_data.get("attributes", [])
+    return [attribute for attribute in attributes if attribute.get("label") == "license_plate"]
 
 
 def save_image(
@@ -94,18 +94,18 @@ def save_image(
     logger,
     histogram,
 ) -> None:
-    if not config['frigate'].get('save_snapshots', False):
+    if not config["frigate"].get("save_snapshots", False):
         logger.debug("Skipping saving snapshot because save_snapshots is set to false")
         return
 
-    draw_box = config['frigate'].get('draw_box', False)
+    draw_box = config["frigate"].get("draw_box", False)
     final_attribute: Optional[Sequence[Dict[str, Any]]] = None
     if draw_box:
         event_url = f"{frigate_url}/api/events/{frigate_event_id}"
         final_attribute = fetch_final_attributes(
             session,
             event_url=event_url,
-            use_frigate_plus=config['frigate'].get('frigate_plus', False),
+            use_frigate_plus=config["frigate"].get("frigate_plus", False),
             logger=logger,
             histogram=histogram,
         )
@@ -131,10 +131,10 @@ def save_image(
             font = ImageFont.load_default()
 
         image_width, image_height = image.size
-        dimension_1 = final_attribute[0]['box'][0]
-        dimension_2 = final_attribute[0]['box'][1]
-        dimension_3 = final_attribute[0]['box'][2]
-        dimension_4 = final_attribute[0]['box'][3]
+        dimension_1 = final_attribute[0]["box"][0]
+        dimension_2 = final_attribute[0]["box"][1]
+        dimension_3 = final_attribute[0]["box"][2]
+        dimension_4 = final_attribute[0]["box"][3]
 
         plate = (
             dimension_1 * image_width,
@@ -166,4 +166,4 @@ def save_image(
     image.save(image_path)
 
 
-__all__ = ['fetch_snapshot', 'fetch_final_attributes', 'save_image']
+__all__ = ["fetch_snapshot", "fetch_final_attributes", "save_image"]

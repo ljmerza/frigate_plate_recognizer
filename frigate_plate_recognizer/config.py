@@ -239,7 +239,9 @@ def load_app_config(
     """Load, validate, and return the application configuration."""
 
     env_mapping: Mapping[str, str] = env or os.environ
-    resolved_config_path = Path(env_mapping.get("FRP_CONFIG_PATH", config_path or DEFAULT_CONFIG_PATH))
+    resolved_config_path = Path(
+        env_mapping.get("FRP_CONFIG_PATH", config_path or DEFAULT_CONFIG_PATH)
+    )
 
     if not resolved_config_path.exists():
         raise FileNotFoundError(
