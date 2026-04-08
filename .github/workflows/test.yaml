@@ -6,7 +6,7 @@ on:
 
 jobs:
   test:
-    uses: ljmerza/misc-actions/.github/workflows/python-tests.yml@v1
+    uses: ljmerza/misc-actions/.github/workflows/python-tests.yml@v2
     with:
       python-version: "3.11"
       coverage-source: "frigate_plate_recognizer"

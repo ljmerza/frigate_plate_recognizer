@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    uses: ljmerza/misc-actions/.github/workflows/python-tests.yml@v1
+    uses: ljmerza/misc-actions/.github/workflows/python-tests.yml@v2
     with:
       python-version: "3.11"
       coverage-source: "frigate_plate_recognizer"
@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and push
-        uses: ljmerza/misc-actions/actions/docker-build-push@v1
+        uses: ljmerza/misc-actions/actions/docker-build-push@v2
         with:
           image-name: ${{ secrets.DOCKERHUB_USERNAME }}/${{ secrets.DOCKERHUB_REPO }}
           registry: docker.io
