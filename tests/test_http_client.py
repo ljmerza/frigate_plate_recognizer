@@ -11,7 +11,7 @@ from frigate_plate_recognizer.http_client import (
 def test_build_retry_strategy():
     """Test retry strategy is configured correctly."""
     retry = build_retry_strategy(retries=5)
-    
+
     assert retry.total == 5
     assert retry.read == 5
     assert retry.connect == 5
@@ -24,11 +24,11 @@ def test_build_retry_strategy():
 def test_build_session_with_timeout():
     """Test session is built with timeout."""
     session = build_session(timeout=30.0, retries=3)
-    
+
     # Check adapters are mounted
     assert "http://" in session.adapters
     assert "https://" in session.adapters
-    
+
     # Check timeout is configured
     http_adapter = session.adapters["http://"]
     assert hasattr(http_adapter, "_timeout")

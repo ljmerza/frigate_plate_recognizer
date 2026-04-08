@@ -10,6 +10,24 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [{ name = "Frigate Plate Recognizer Maintainers" }]
+dependencies = [
+    "paho-mqtt==2.1.0",
+    "requests==2.32.3",
+    "PyYAML==6.0.2",
+    "Pillow==11.0.0",
+    "prometheus-client==0.20.0",
+    "pydantic==2.7.4",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.2",
+    "pytest-cov==5.0.0",
+    "pytest-timeout>=2.4.0",
+    "ruff==0.6.4",
+    "types-PyYAML==6.0.12.20240917",
+    "types-requests==2.32.0.20241016",
+]
 
 [tool.setuptools.packages.find]
 include = ["frigate_plate_recognizer*"]
@@ -23,14 +41,6 @@ src = ["frigate_plate_recognizer", "tests", "."]
 [tool.ruff.lint]
 select = ["E", "F", "B", "I"]
 ignore = ["E203", "E266", "E501"]
-
-[tool.mypy]
-python_version = "3.11"
-files = ["frigate_plate_recognizer"]
-ignore_missing_imports = true
-warn_unused_configs = true
-show_error_codes = true
-pretty = true
 
 [tool.pytest.ini_options]
 minversion = "8.0"

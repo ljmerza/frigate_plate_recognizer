@@ -23,7 +23,7 @@ def get_plate(
     watched_plate: Optional[str] = None
     fuzzy_score: Optional[float] = None
 
-    if config.get('plate_recognizer'):
+    if config.get("plate_recognizer"):
         if plate_session is None:
             logger.error("Plate Recognizer session is not initialised")
             return None, None, None, None
@@ -34,7 +34,7 @@ def get_plate(
             plate_session,
             logger,
         )
-    elif config.get('code_project'):
+    elif config.get("code_project"):
         if code_project_session is None:
             logger.error("CodeProject.AI session is not initialised")
             return None, None, None, None
@@ -48,7 +48,7 @@ def get_plate(
         logger.error("Plate Recognizer is not configured")
         return None, None, None, None
 
-    min_score = config['frigate'].get('min_score')
+    min_score = config["frigate"].get("min_score")
     score_too_low = bool(min_score and plate_score and plate_score < min_score)
 
     if not fuzzy_score and score_too_low:
@@ -58,4 +58,4 @@ def get_plate(
     return plate_number, plate_score, watched_plate, fuzzy_score
 
 
-__all__ = ['get_plate']
+__all__ = ["get_plate"]

@@ -46,12 +46,13 @@ def reset() -> None:
         CURRENT_EVENTS.clear()
         current_events_gauge.set(0)
 
+
 __all__ = [
-    'CURRENT_EVENTS',
-    'track_event_start',
-    'is_event_tracked',
-    'increment_event_attempt',
-    'get_event_attempts',
-    'clear_event',
-    'reset',
+    "CURRENT_EVENTS",
+    "track_event_start",
+    "is_event_tracked",
+    "increment_event_attempt",
+    "get_event_attempts",
+    "clear_event",
+    "reset",
 ]
