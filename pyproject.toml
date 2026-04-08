@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "frigate-plate-recognizer"
-version = "2.3.1"
+version = "2.3.2"
 description = "Identify license plates and publish enriched events for Frigate."
 readme = "README.md"
 requires-python = ">=3.11"
