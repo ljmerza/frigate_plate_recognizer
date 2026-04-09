@@ -1,10 +1,14 @@
-name: Deploy to Docker Hub
+name: Build and Push Image
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - master
+    branches: [master]
+    tags: ["v*"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -13,13 +17,11 @@ jobs:
       python-version: "3.11"
       coverage-source: "frigate_plate_recognizer"
 
-  deploy_latest_to_docker:
-    name: Deploy Latest Tag to Docker Hub
+  build-and-push:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Build and push
         uses: ljmerza/misc-actions/actions/docker-build-push@v2
@@ -29,4 +31,17 @@ jobs:
           registry-username: ${{ secrets.DOCKERHUB_USERNAME }}
           registry-password: ${{ secrets.DOCKERHUB_TOKEN }}
           tags: |
-            type=raw,value=latest
+            type=ref,event=tag
+            type=raw,value=latest,enable={{is_default_branch}}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
