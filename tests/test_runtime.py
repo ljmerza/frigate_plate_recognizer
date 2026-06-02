@@ -685,9 +685,7 @@ class TestDuplicateSnapshot(BaseTestCase):
         after["current_attributes"] = [{"label": "license_plate", "score": 0.9}]
 
         self.assertEqual(index._process_message_inner(self._message(after)), "no_plate")
-        self.assertEqual(
-            index._process_message_inner(self._message(after)), "duplicate_snapshot"
-        )
+        self.assertEqual(index._process_message_inner(self._message(after)), "duplicate_snapshot")
         mock_plate.assert_called_once()
 
     @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
@@ -700,9 +698,7 @@ class TestDuplicateSnapshot(BaseTestCase):
             index._process_message_inner(self._message(self._after(111.0))), "no_plate"
         )
         self.assertEqual(
-            index._process_message_inner(
-                self._message(self._after(111.0), message_type="end")
-            ),
+            index._process_message_inner(self._message(self._after(111.0), message_type="end")),
             "no_plate",
         )
         self.assertEqual(mock_plate.call_count, 2)
