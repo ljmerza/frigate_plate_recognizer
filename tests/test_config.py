@@ -45,6 +45,20 @@ def test_env_overrides(tmp_path: Path) -> None:
     assert app_config.plate_recognizer.max_retries == 5
 
 
+def test_skip_duplicate_snapshots_default_and_override(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path, _base_config())
+
+    app_config = load_app_config(config_path=config_path, env={"FRP_CONFIG_PATH": str(config_path)})
+    assert app_config.frigate.skip_duplicate_snapshots is True
+
+    env = {
+        "FRP_CONFIG_PATH": str(config_path),
+        "FRP_SKIP_DUPLICATE_SNAPSHOTS": "false",
+    }
+    overridden = load_app_config(config_path=config_path, env=env)
+    assert overridden.frigate.skip_duplicate_snapshots is False
+
+
 def test_missing_recognizer_raises(tmp_path: Path) -> None:
     data = {
         "frigate": {

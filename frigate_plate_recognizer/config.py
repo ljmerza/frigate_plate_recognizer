@@ -35,6 +35,7 @@ ENV_FIELD_MAP: Dict[str, Sequence[str]] = {
     "FRP_LICENSE_PLATE_MIN_SCORE": ("frigate", "license_plate_min_score"),
     "FRP_FUZZY_MATCH": ("frigate", "fuzzy_match"),
     "FRP_MAX_ATTEMPTS": ("frigate", "max_attempts"),
+    "FRP_SKIP_DUPLICATE_SNAPSHOTS": ("frigate", "skip_duplicate_snapshots"),
     "FRP_LOG_LEVEL": ("logger_level",),
     "FRP_METRICS_PORT": ("metrics_port",),
     "FRP_HEALTHCHECK_PORT": ("healthcheck_port",),
@@ -92,6 +93,7 @@ class FrigateConfig(BaseModel):
     watched_plates: list[str] = Field(default_factory=list)
     fuzzy_match: float = Field(default=0.0, ge=0.0, le=1.0)
     max_attempts: int = Field(default=0, ge=0)
+    skip_duplicate_snapshots: bool = True
 
     @field_validator("camera", "zones", "objects", "watched_plates", mode="before")
     @classmethod

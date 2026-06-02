@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import frigate_plate_recognizer.app as index
+import frigate_plate_recognizer.events as events
 from frigate_plate_recognizer.config import (
     AppConfig,
     FrigateConfig,
@@ -540,6 +541,182 @@ class TestStorePlateInDb(BaseTestCase):
 
         self.assertTrue(result)
         mock_insert.assert_called_once()
+
+
+class TestEventSnapshotTracking(unittest.TestCase):
+    def setUp(self):
+        events.reset()
+
+    def tearDown(self):
+        events.reset()
+
+    def test_round_trip(self):
+        self.assertIsNone(events.get_last_snapshot_frame_time("evt1"))
+        events.set_last_snapshot_frame_time("evt1", 5.0)
+        self.assertEqual(events.get_last_snapshot_frame_time("evt1"), 5.0)
+
+    def test_clear_event_drops_frame(self):
+        events.set_last_snapshot_frame_time("evt1", 5.0)
+        events.clear_event("evt1")
+        self.assertIsNone(events.get_last_snapshot_frame_time("evt1"))
+
+    def test_reset_drops_frame(self):
+        events.set_last_snapshot_frame_time("evt1", 5.0)
+        events.reset()
+        self.assertIsNone(events.get_last_snapshot_frame_time("evt1"))
+
+
+class TestDuplicateSnapshot(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        # _process_message_inner skips the very first message it ever sees
+        index.first_message = False
+        events.reset()
+        index.config = {
+            "frigate": {
+                "frigate_url": "http://frigate.local",
+                "zones": [],
+                "camera": [],
+                "objects": ["car"],
+                "frigate_plus": False,
+                "skip_duplicate_snapshots": True,
+            }
+        }
+
+    def tearDown(self):
+        events.reset()
+        super().tearDown()
+
+    @staticmethod
+    def _after(frame_time, event_id="evt1"):
+        return {
+            "id": event_id,
+            "camera": "camera1",
+            "label": "car",
+            "current_zones": [],
+            # top_score present here but absent from `before` keeps the existing
+            # top_score dedup in check_invalid_event from firing, so these tests
+            # exercise the snapshot frame_time dedup in isolation.
+            "top_score": 0.7,
+            "has_snapshot": True,
+            "snapshot": {"frame_time": frame_time},
+        }
+
+    @staticmethod
+    def _message(after, *, message_type="update"):
+        payload = {"before": {}, "after": after, "type": message_type}
+        msg = MagicMock()
+        msg.payload = json.dumps(payload).encode()
+        return msg
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_first_frame_processes_and_records(self, _mock_dup, _mock_snap, mock_plate):
+        result = index._process_message_inner(self._message(self._after(111.0)))
+        self.assertEqual(result, "no_plate")
+        mock_plate.assert_called_once()
+        self.assertEqual(events.get_last_snapshot_frame_time("evt1"), 111.0)
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_duplicate_frame_skipped(self, _mock_dup, mock_snap, mock_plate):
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))),
+            "duplicate_snapshot",
+        )
+        # The duplicate is short-circuited before any Frigate fetch or AI call.
+        mock_plate.assert_called_once()
+        mock_snap.assert_called_once()
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_new_frame_processes_again(self, _mock_dup, _mock_snap, mock_plate):
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(222.0))), "no_plate"
+        )
+        self.assertEqual(mock_plate.call_count, 2)
+        self.assertEqual(events.get_last_snapshot_frame_time("evt1"), 222.0)
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_clear_event_allows_reprocessing(self, _mock_dup, _mock_snap, mock_plate):
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        index._clear_event("evt1")
+        self.assertIsNone(events.get_last_snapshot_frame_time("evt1"))
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        self.assertEqual(mock_plate.call_count, 2)
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_flag_off_processes_duplicates(self, _mock_dup, _mock_snap, mock_plate):
+        index.config["frigate"]["skip_duplicate_snapshots"] = False
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        self.assertEqual(mock_plate.call_count, 2)
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_frigate_plus_duplicate_frame_skipped(self, _mock_dup, _mock_snap, mock_plate):
+        # The gap issue #75 is about: with frigate_plus the existing top_score dedup
+        # is disabled, so the snapshot frame_time dedup is what stops repeat calls.
+        index.config["frigate"]["frigate_plus"] = True
+        index.config["frigate"]["license_plate_min_score"] = 0
+        after = self._after(111.0)
+        after["current_attributes"] = [{"label": "license_plate", "score": 0.9}]
+
+        self.assertEqual(index._process_message_inner(self._message(after)), "no_plate")
+        self.assertEqual(
+            index._process_message_inner(self._message(after)), "duplicate_snapshot"
+        )
+        mock_plate.assert_called_once()
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_end_message_is_not_deduped(self, _mock_dup, _mock_snap, mock_plate):
+        # An "end" message clears the event then continues processing, so it is
+        # always handled once more even if its snapshot frame is unchanged.
+        self.assertEqual(
+            index._process_message_inner(self._message(self._after(111.0))), "no_plate"
+        )
+        self.assertEqual(
+            index._process_message_inner(
+                self._message(self._after(111.0), message_type="end")
+            ),
+            "no_plate",
+        )
+        self.assertEqual(mock_plate.call_count, 2)
+
+    @patch("frigate_plate_recognizer.app.get_plate", return_value=(None, None, None, None))
+    @patch("frigate_plate_recognizer.app.get_snapshot", return_value=b"img")
+    @patch("frigate_plate_recognizer.app.is_duplicate_event", return_value=False)
+    def test_missing_frame_time_processes_normally(self, _mock_dup, _mock_snap, mock_plate):
+        after = self._after(111.0)
+        del after["snapshot"]
+        self.assertEqual(index._process_message_inner(self._message(after)), "no_plate")
+        self.assertEqual(index._process_message_inner(self._message(after)), "no_plate")
+        self.assertEqual(mock_plate.call_count, 2)
+        self.assertIsNone(events.get_last_snapshot_frame_time("evt1"))
 
 
 if __name__ == "__main__":

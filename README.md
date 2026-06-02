@@ -95,6 +95,16 @@ frigate:
   max_attempts: 20 # Optional: if set, will limit the number of snapshots sent for recognition for any particular event.
 ```
 
+### Skip duplicate snapshots for stationary objects
+
+When an object stays still (e.g. a parked car), Frigate keeps the same event open and re-sends update messages with the *same* best snapshot. By default frigate-plate-recognizer detects this and skips re-sending an unchanged snapshot for recognition, so a stationary car only costs one API call per unique snapshot instead of one every few seconds. This is on by default; set it to `false` to recognize every update message:
+
+```yaml
+frigate:
+  # ...
+  skip_duplicate_snapshots: true # default. Skips API calls when the event's snapshot frame has not changed (e.g. stationary cars).
+```
+
 If you're using CodeProject.AI, you'll need to comment out plate_recognizer in your config. Then add and update "api_url" with your CodeProject.AI Service API URL. Your config should look like:
 
 ```yml

@@ -36,8 +36,10 @@ from frigate_plate_recognizer.event_filters import (
 from frigate_plate_recognizer.events import (
     clear_event,
     get_event_attempts,
+    get_last_snapshot_frame_time,
     increment_event_attempt,
     is_event_tracked,
+    set_last_snapshot_frame_time,
     track_event_start,
 )
 from frigate_plate_recognizer.healthcheck import start_healthcheck_server
@@ -191,6 +193,14 @@ def _get_event_attempts(event_id: str) -> int:
 
 def _clear_event(event_id: str) -> None:
     clear_event(event_id)
+
+
+def _get_last_snapshot_frame_time(event_id: str) -> Optional[float]:
+    return get_last_snapshot_frame_time(event_id)
+
+
+def _set_last_snapshot_frame_time(event_id: str, frame_time: float) -> None:
+    set_last_snapshot_frame_time(event_id, frame_time)
 
 
 def get_snapshot(frigate_event_id, frigate_url, cropped):
@@ -438,6 +448,19 @@ def _process_message_inner(message) -> str:
     if frigate_plus and not is_valid_license_plate(after_data):
         return "invalid_license_plate"
 
+    snapshot_frame_time = (after_data.get("snapshot") or {}).get("frame_time")
+    if (
+        cfg["frigate"].get("skip_duplicate_snapshots", True)
+        and snapshot_frame_time is not None
+        and _get_last_snapshot_frame_time(frigate_event_id) == snapshot_frame_time
+    ):
+        logger.debug(
+            "Skipping duplicate snapshot frame for event %s (frame_time %s)",
+            frigate_event_id,
+            snapshot_frame_time,
+        )
+        return "duplicate_snapshot"
+
     if message_type != "end" and not _is_event_tracked(frigate_event_id):
         _track_event_start(frigate_event_id)
 
@@ -460,6 +483,9 @@ def _process_message_inner(message) -> str:
 
     attempt_count = _increment_event_attempt(frigate_event_id)
     logger.debug(f"Attempt {attempt_count} for event {frigate_event_id}")
+
+    if snapshot_frame_time is not None:
+        _set_last_snapshot_frame_time(frigate_event_id, snapshot_frame_time)
 
     plate_number, plate_score, watched_plate, fuzzy_score = get_plate(snapshot)
     result = "no_plate"
