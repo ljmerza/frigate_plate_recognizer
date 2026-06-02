@@ -106,9 +106,14 @@ def recognize_with_code_project(
         logger.error("CodeProject.AI API URL is not configured")
         return None, None, None, None
 
+    data: Dict[str, Any] = {}
+    min_confidence = api_config.get("min_confidence")
+    if min_confidence is not None:
+        data["min_confidence"] = min_confidence
+
     start_time = time.perf_counter()
     try:
-        response = session.post(api_url, files={"upload": image})
+        response = session.post(api_url, files={"upload": image}, data=data or None)
         response.raise_for_status()
     except RequestException as exc:
         logger.error("CodeProject.AI request failed: %s", exc)

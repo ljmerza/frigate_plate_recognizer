@@ -104,7 +104,12 @@ If you're using CodeProject.AI, you'll need to comment out plate_recognizer in y
 #    - us-ca
 code_project:
   api_url: http://127.0.0.1:32168/v1/image/alpr
+  min_confidence: 0.4 # Optional: minimum plate confidence (0.0-1.0). Plates below this are ignored. CodeProject.AI's default is ~0.4.
 ```
+
+> **Note:** CodeProject.AI's ALPR engine has no region/country concept, so the `regions` option only
+> applies to `plate_recognizer`. `min_confidence` is the only recognition tuning parameter
+> CodeProject.AI's `/v1/image/alpr` endpoint accepts.
 
 ### Save Snapshot Images to Path
 

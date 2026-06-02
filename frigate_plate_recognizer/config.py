@@ -45,6 +45,7 @@ ENV_FIELD_MAP: Dict[str, Sequence[str]] = {
     "FRP_PLATE_RECOGNIZER_RETRIES": ("plate_recognizer", "max_retries"),
     "FRP_PLATE_RECOGNIZER_VERIFY_SSL": ("plate_recognizer", "verify_ssl"),
     "FRP_CODE_PROJECT_API_URL": ("code_project", "api_url"),
+    "FRP_CODE_PROJECT_MIN_CONFIDENCE": ("code_project", "min_confidence"),
     "FRP_CODE_PROJECT_TIMEOUT": ("code_project", "request_timeout"),
     "FRP_CODE_PROJECT_RETRIES": ("code_project", "max_retries"),
     "FRP_CODE_PROJECT_VERIFY_SSL": ("code_project", "verify_ssl"),
@@ -131,6 +132,7 @@ class CodeProjectConfig(BaseModel):
     """Configuration for CodeProject.AI API."""
 
     api_url: str
+    min_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     request_timeout: float = Field(default=10.0, gt=0.0)
     max_retries: int = Field(default=3, ge=0)
     verify_ssl: bool = True
